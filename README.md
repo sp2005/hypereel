@@ -4,6 +4,8 @@ A recipe-driven, agentic highlight-reel builder built on LangGraph.
 
 > Full design document: [`design/HypeReel-Design.html`](design/HypeReel-Design.html)
 
+> Demo: [Watch the HypeReel demo](https://drive.google.com/file/d/1c_W8egamBQFVbjVJV_sDs186M_oqpM1u/view?usp=sharing)
+
 **The one-liner:** My agent helps a player or coach turn a full 60-minute game recording into a share-ready highlight reel matching a plain-language brief (one player, a whole team, only threes, no steals) in a Streamlit web app, replacing the 3–4 hours of manual scrubbing and clip-cutting in a video editor it takes today. It ingests the video, detects and scoreboard-confirms the right plays, and critiques and re-cuts its own reel on its own using ~6 tools (yt-dlp, frame sampling, scoreboard CV, a vision model, an LLM judge, and ffmpeg), hands off to a human to approve the clip list before it renders and again before it shares, and I'll know it works when a user gets a watchable, single-team reel in under 30 minutes that they'd actually post 8 times out of 10.
 
 ## What it does
