@@ -1,0 +1,99 @@
+# HypeReel recipe — flagship demo.
+#
+# Domain: AAU basketball. Builds an individual highlight reel for jersey #23
+# (red team) by combining cheap audio/motion proposers with a vision-model
+# scorer that confirms the event type and checks the subject is actually in
+# frame. See design/HypeReel-Design.html section 4 for the recipe schema.
+
+id: basketball_player_v1
+name: "Basketball — Individual Player Highlights"
+domain: basketball
+highlight_model: event_based
+description: >
+  Builds a highlight reel centered on one player (jersey #23, red team) from
+  a full AAU game recording: baskets, threes, blocks, and steal-to-fast-break
+  sequences, spread across all four quarters.
+
+moment_types:
+  - name: made_basket
+    description: >
+      The subject player makes a two-point field goal — the ball visibly
+      passes through the hoop immediately after the subject's shot attempt,
+      release, or putback. Do not count free throws or the opposing team's
+      baskets.
+    weight: 1.0
+    ideal_len: 8
+
+  - name: three_pointer
+    description: >
+      The subject player makes a shot from behind the three-point line.
+      Look for the arc of the shot and crowd/teammate reaction at the make;
+      exclude misses and airballs even if the subject is clearly shooting.
+    weight: 1.2
+    ideal_len: 8
+
+  - name: block
+    description: >
+      The subject player blocks or clearly alters an opposing player's shot
+      attempt with their hand — the shot is deflected or knocked away by the
+      subject, not merely contested from a distance.
+    weight: 0.9
+    ideal_len: 6
+
+  - name: steal_break
+    description: >
+      The subject player steals or deflects the ball away from an opponent
+      and it leads directly into a fast break the subject is part of (either
+      running it or finishing it). A steal with no resulting break attempt
+      does not qualify on its own.
+    weight: 0.8
+    ideal_len: 10
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.4
+    params:
+      min_peak_db: -12
+  - type: motion_intensity
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.3
+
+subject_selector:
+  type: jersey_number
+  value: 23
+  team_color: red
+  audience: individual
+
+selection:
+  max_duration: 300
+  min_clip: 4
+  max_clip: 12
+  lead_in: 2
+  lead_out: 3
+  min_score: 0.5
+  ordering: chronological
+  coverage: "spread across all four quarters"
+  dedup_overlap: true
+
+style:
+  transitions: hard_cut
+  audio: keep_original
+  overlays: [player_name, score]
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [timeouts, bench_sequences, shaky_camera]
+  privacy: "never center or identify non-subject minors in the frame; blur or crop where the subject is not clearly the focal player"
+  grounding: "never label a moment_type the vision scorer isn't confident about — degrade to audio+motion score rather than fabricate an event"
+
+acceptance:
+  - "every clip in the final reel visibly contains jersey #23 in a red uniform"
+  - "reel covers plays from all four quarters, not clustered in one segment"
+  - "no clip shows a timeout, bench sequence, or shaky/whip-pan camera work"

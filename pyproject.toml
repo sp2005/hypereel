@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hypereel"
+version = "0.1.0"
+description = "HypeReel — a recipe-driven, agentic highlight-reel builder (LangGraph)."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# Core is deliberately light: the whole pipeline runs (mock providers, manifest
+# render) with just these. Heavy media libs, model SDKs, and the UI are opt-in
+# extras — everything that needs them is lazy-imported, so `pip install -e .`
+# is enough for the offline demo and the test suite.
+dependencies = [
+  "pydantic>=2.6",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "langgraph>=0.2.0",
+  "langchain-core>=0.3.0",
+]
+
+[project.optional-dependencies]
+# Real video ingestion + local signal extraction + video render.
+media = [
+  "yt-dlp>=2024.0.0",
+  "opencv-python>=4.8",
+  "librosa>=0.10",
+  "soundfile>=0.12",
+  "moviepy>=1.0.3",
+  "numpy>=1.24",
+]
+# Live vision/LLM providers (Gemini, Groq, and OpenAI-compatible Nebius/Fireworks).
+providers = [
+  "google-generativeai>=0.7",
+  "groq>=0.9",
+  "openai>=1.30",
+]
+# Streamlit web UI.
+ui = ["streamlit>=1.30"]
+# Test suite.
+dev = ["pytest>=8.0", "pytest-mock>=3.12"]
+# Everything, for a full local install.
+all = [
+  "yt-dlp>=2024.0.0", "opencv-python>=4.8", "librosa>=0.10", "soundfile>=0.12",
+  "moviepy>=1.0.3", "numpy>=1.24",
+  "google-generativeai>=0.7", "groq>=0.9", "openai>=1.30",
+  "streamlit>=1.30",
+  "pytest>=8.0", "pytest-mock>=3.12",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100

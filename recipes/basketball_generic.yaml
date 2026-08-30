@@ -1,0 +1,142 @@
+# HypeReel recipe — GENERIC, prompt-driven basketball highlights.
+#
+# This recipe carries NO hardcoded team colors, jersey numbers, opponent, or
+# scoreboard regions. It is meant to be reused across any basketball game: you
+# describe the subject (team colors, scoreboard label, player numbers, the
+# opponent to exclude, and even the output quality) at runtime in the UI's
+# "Describe who/what to capture" box (or the CLI's --describe flag). That
+# free-text brief LEADS the vision model's "who/what to look for" judgment, so
+# fine-tuning happens in the prompt, not by editing this file.
+#
+# Example brief:
+#   "Highlights for team EBE (BLACK and BLUE jerseys; 'EBE' on the scoreboard).
+#    The opponent is P-Town — never include their plays. Prefer players #23 and
+#    #4 when their numbers are legible, but treat the BLACK/BLUE jersey as the
+#    reliable filter. Use HD if available."
+#
+# Notes:
+#  * subject_selector.type is 'team_color' (not 'none') with audience
+#    'individual' on purpose: that combination REQUIRES the vision model to
+#    report the described subject present, so the opposing team's plays are
+#    filtered out. The specific colors/numbers live in your prompt.
+#  * There is deliberately no 'scoreboard' signal here — its pixel regions are
+#    specific to one broadcast's overlay and can't be generic. Detection leans
+#    on the vision rubric instead; asking for HD in the prompt helps it read
+#    plays. (A per-video recipe can add a calibrated scoreboard signal later.)
+
+id: basketball_generic_v1
+name: "Basketball — Generic (describe the subject in the prompt)"
+domain: basketball
+highlight_model: event_based
+description: >
+  A reusable, prompt-driven basketball highlight recipe. Describe the subject
+  team (jersey colors, scoreboard label), the players you care about, and the
+  opponent to exclude in the runtime "describe who/what to capture" prompt; the
+  recipe stays generic so it works on any game.
+
+moment_types:
+  - name: made_basket
+    description: >
+      The subject (a player on the team described in the prompt) makes a
+      two-point field goal: the ball passes through the hoop right after their
+      shot, jumper, or putback. Do NOT count free throws, misses, or any basket
+      made by the opposing team.
+    weight: 1.0
+    ideal_len: 8
+
+  - name: three_pointer
+    description: >
+      The subject (a player on the team described in the prompt) makes a shot
+      from behind the three-point line — look for the shot arc and the reaction
+      at the make. Exclude misses and any shot by the opposing team.
+    weight: 1.3
+    ideal_len: 8
+
+  - name: layup_or_dunk
+    description: >
+      The subject finishes at the rim with a driving layup, fast-break finish,
+      or dunk. Exclude missed attempts and any finish by the opposing team.
+    weight: 1.1
+    ideal_len: 8
+
+  - name: block
+    description: >
+      The subject blocks or clearly alters an opposing player's shot with their
+      hand — deflected or swatted away, not merely contested from a distance.
+    weight: 1.0
+    ideal_len: 6
+
+  - name: steal
+    description: >
+      The subject takes the ball from an opposing player — a pick-off or a
+      strip — forcing a change of possession.
+    weight: 0.9
+    ideal_len: 8
+
+  - name: rebound
+    description: >
+      The subject grabs a missed shot out of the air, especially a contested
+      board or an offensive rebound that keeps the possession alive.
+    weight: 0.7
+    ideal_len: 6
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.4
+    params:
+      min_peak_db: -12
+  - type: motion_intensity
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.3
+
+subject_selector:
+  # Generic on purpose: no color/number here. The runtime prompt supplies the
+  # subject description and LEADS the vision prompt; these fields only tell the
+  # model to defer to that brief and to filter out the opposing team.
+  type: team_color
+  value: "the subject described in the runtime prompt"
+  team_color: >
+    Identify the subject team from the jersey/scoreboard description in the
+    prompt. Set subject_present=true only when a player on that team is making
+    the play; set it false for any player on the opposing team, so the
+    opponent's plays are never included.
+  audience: individual
+
+selection:
+  max_duration: 300
+  min_clip: 4
+  max_clip: 12
+  lead_in: 2
+  lead_out: 3
+  min_score: 0.5
+  ordering: chronological
+  coverage: "spread across the whole game, not clustered in one segment"
+  dedup_overlap: true
+
+style:
+  transitions: crossfade
+  audio: keep_original
+  overlays: [player_name, score]
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [timeouts, bench_sequences, shaky_camera, dead_ball_standing_around, warm_ups]
+  privacy: "never center or identify non-subject minors; keep the focus on the subject's live action"
+  grounding: >
+    never label a moment_type the vision scorer isn't confident about — degrade
+    to a lower score rather than fabricate a play; when it is unclear whether a
+    subject-team player made the play, mark subject_present=false.
+
+acceptance:
+  - "every clip shows a player from the team described in the prompt making the play"
+  - "no clip's highlighted play is made by the opposing team"
+  - "clips show real basketball plays (basket, three, layup/dunk, block, steal, rebound), not padding"
+  - "plays are spread across the whole game and not clustered in one segment"
+  - "no clip shows a timeout, bench sequence, dead-ball standing around, warm-ups, or shaky camera work"

@@ -1,0 +1,127 @@
+# HypeReel recipe — full-game basketball highlight reel (both teams).
+#
+# Domain: basketball. Captures the plays that actually make a basketball reel
+# exciting — made baskets, threes, dunks/layups, blocks, steals, and rebounds —
+# from anywhere in the game, for either team. Use this when you want "the best
+# basketball of the game" rather than a single player's or single team's reel.
+#
+# Richer moment rubric + crossfade transitions + a wider vision sample are the
+# direct answer to "it didn't feel like it understood basketball": each
+# moment_type below is grading criteria the vision scorer reads, so spelling out
+# more play types makes it confirm more real basketball instead of shrugging
+# ("unclassified"). The LLM-as-judge critic then drops any remaining padding
+# before a human ever sees the reel.
+
+id: basketball_game_highlights_v1
+name: "Basketball — Full-Game Highlights (Both Teams)"
+domain: basketball
+highlight_model: event_based
+description: >
+  Builds an exciting highlight reel from a full basketball game recording,
+  capturing the best plays from BOTH teams: made baskets, three-pointers,
+  dunks and layups, blocks, steals, and rebounds, spread across the whole game.
+
+moment_types:
+  - name: made_basket
+    description: >
+      Any player makes a two-point field goal — the ball visibly passes through
+      the hoop right after a shot, jumper, or putback. Count the make for either
+      team; do not count free throws or missed shots.
+    weight: 1.0
+    ideal_len: 8
+
+  - name: three_pointer
+    description: >
+      A player makes a shot from behind the three-point line — look for the shot
+      arc and teammate/crowd reaction at the make. Exclude misses and airballs.
+    weight: 1.3
+    ideal_len: 8
+
+  - name: layup_or_dunk
+    description: >
+      A player finishes at the rim with a driving layup, fast-break finish, or
+      dunk. Look for a player attacking the basket and the ball going in from
+      close range. Exclude missed attempts.
+    weight: 1.1
+    ideal_len: 8
+
+  - name: block
+    description: >
+      A defender blocks or clearly alters an opponent's shot attempt with their
+      hand — the shot is deflected or swatted away, not merely contested from a
+      distance.
+    weight: 1.0
+    ideal_len: 6
+
+  - name: steal
+    description: >
+      A defender takes the ball away from an opponent — a pick-off of a pass or
+      a strip of the dribble — leading to a change of possession. A clean steal
+      counts even without a resulting fast break.
+    weight: 0.9
+    ideal_len: 8
+
+  - name: rebound
+    description: >
+      A player grabs a missed shot out of the air, especially a contested board
+      in traffic or an offensive rebound that keeps a possession alive. Routine
+      uncontested rebounds with no follow-up action are less interesting.
+    weight: 0.7
+    ideal_len: 6
+
+  - name: defensive_stop
+    description: >
+      A strong defensive sequence that ends the opponent's possession without a
+      block or steal — tight on-ball contest forcing a miss, a drawn charge, or
+      a forced turnover / shot-clock stall.
+    weight: 0.7
+    ideal_len: 7
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.4
+    params:
+      min_peak_db: -12
+  - type: motion_intensity
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.3
+
+subject_selector:
+  type: none
+  value: null
+  audience: team
+
+selection:
+  max_duration: 300
+  min_clip: 4
+  max_clip: 12
+  lead_in: 2
+  lead_out: 3
+  min_score: 0.5
+  ordering: chronological
+  coverage: "spread across the whole game, not clustered in one segment"
+  dedup_overlap: true
+
+style:
+  transitions: crossfade
+  audio: keep_original
+  overlays: [score]
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [timeouts, bench_sequences, shaky_camera, dead_ball_standing_around]
+  privacy: "never center or identify non-playing minors in the frame; keep the focus on live action"
+  grounding: "never label a moment_type the vision scorer isn't confident about — degrade to a lower score rather than fabricate a play; mark moment_type null when no clear basketball play occurs"
+
+acceptance:
+  - "every clip shows a real basketball play: a made basket, three, layup/dunk, block, steal, rebound, or clear defensive stop"
+  - "the reel is NOT padded with clips where nothing clearly happens"
+  - "plays are varied (not all the same moment_type) and spread across the whole game"
+  - "no clip shows a timeout, bench sequence, dead-ball standing around, or shaky/whip-pan camera work"

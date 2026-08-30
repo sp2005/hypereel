@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HypeReel — Design Document</title>
+<style>
+  :root{
+    --ink:#1a2233; --muted:#5b6577; --line:#e3e8f0; --bg:#ffffff;
+    --accent:#f97316; --accent2:#2563eb; --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --chip:#f1f5f9; --code:#0f172a;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); max-width:960px; margin:0 auto; padding:40px 24px 120px; line-height:1.55; background:var(--bg)}
+  h1{font-size:2.2rem; margin:0 0 .2em; letter-spacing:-.5px}
+  h1 .sub{display:block; font-size:1rem; font-weight:500; color:var(--muted); margin-top:.4em}
+  h2{margin-top:2.4em; padding-bottom:.3em; border-bottom:2px solid var(--line); font-size:1.5rem}
+  h3{margin-top:1.6em; font-size:1.15rem; color:var(--accent2)}
+  code{background:var(--chip); padding:.12em .4em; border-radius:5px; font-size:.9em;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  pre{background:var(--code); color:#e5edff; padding:16px 18px; border-radius:10px; overflow:auto;
+    font-size:.82rem; line-height:1.45; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  table{border-collapse:collapse; width:100%; margin:1em 0; font-size:.92rem}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+  th{background:#f8fafc; font-weight:600}
+  .oneliner{background:linear-gradient(180deg,#fff7ed,#fff); border:1px solid #fed7aa;
+    border-left:5px solid var(--accent); border-radius:10px; padding:18px 20px; font-size:1.05rem}
+  .callout{background:#f0f9ff; border:1px solid #bae6fd; border-left:5px solid var(--accent2);
+    border-radius:8px; padding:12px 16px; margin:1em 0}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .card{border:1px solid var(--line); border-radius:10px; padding:14px 16px; background:#fff}
+  .chip{display:inline-block; background:var(--chip); border-radius:999px; padding:2px 10px;
+    font-size:.78rem; color:var(--muted); margin:0 4px 4px 0}
+  .tag-read{color:var(--good); font-weight:600}
+  .tag-write{color:var(--bad); font-weight:600}
+  .mermaid{background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; margin:1em 0}
+  .muted{color:var(--muted)}
+  .pill{font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; font-weight:700;
+    padding:2px 8px; border-radius:6px}
+  .pill.det{background:#dcfce7; color:#166534}
+  .pill.llm{background:#e0e7ff; color:#3730a3}
+  footer{margin-top:60px; color:var(--muted); font-size:.85rem; border-top:1px solid var(--line); padding-top:16px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>HypeReel
+  <span class="sub">A recipe-driven, agentic highlight-reel builder · Week 3 Design Document · v0.1</span>
+</h1>
+
+<p><span class="chip">Track 2 · LangChain + LangGraph</span>
+   <span class="chip">Bring-your-own use case</span>
+   <span class="chip">Free model stack</span>
+   <span class="chip">Built with Claude Code</span></p>
+
+<img src="overview.png"
+  alt="HypeReel at a glance: the one-liner; a nine-step high-level agent workflow (plan strategy, resolve and download source, propose candidate windows, confirm/score windows with vision, score and select to the time budget, human approves the clip list [approval #1], render reel, human approves share [approval #2], deliver/upload); the ~6 tools (source resolver, audio-peak detector, motion-change detector, vision analyzer, video editor/renderer, uploader) tagged read or write; the web-app user experience (input and recipe, review clip list, preview and approve share); and a pluggable recipe library across basketball, cricket, soccer, esports, lectures, podcasts, and travel"
+  style="width:100%; border:1px solid var(--line); border-radius:10px; margin:1.2em 0" />
+<p class="muted" style="margin-top:-.6em">One-page overview of the design that follows. The recipe
+library shows example domains to illustrate that recipes are pluggable; v1 ships the basketball recipe
+with an architecture-walkthrough stub (see §11 Scope).</p>
+
+<h2>1 · The one-liner</h2>
+<div class="oneliner">
+My agent helps a <b>player or coach</b> turn a full 60-minute game recording into a
+<b>share-ready highlight reel</b> matching a <b>plain-language brief</b> (one player, a whole team,
+only threes, no steals) in a <b>Streamlit web app</b>, replacing the <b>3–4 hours of manual
+scrubbing and clip-cutting</b> in a video editor it takes today. It ingests the video, detects and
+scoreboard-confirms the right plays, and critiques and re-cuts its own reel on its own using
+<b>~6 tools</b> (yt-dlp, frame sampling, scoreboard CV, a vision model, an LLM judge, and ffmpeg),
+hands off to a human to <b>approve the clip list before it renders and again before it shares</b>,
+and I'll know it works when a user gets a watchable, single-team reel <b>in under 30 minutes</b>
+that they'd actually post <b>8 times out of 10</b>.
+</div>
+
+<h2>2 · The Agent Framework</h2>
+<table>
+<tr><th>Field</th><th>Decision</th></tr>
+<tr><td><b>Agent goal</b></td><td>Turn a raw video + a recipe into a time-boxed, share-ready highlight reel.</td></tr>
+<tr><td><b>Surface</b></td><td>Streamlit web app (chat-like input + review panel). CLI for scripted/demo runs.</td></tr>
+<tr><td><b>Ordered steps</b></td><td>1) plan strategy from the recipe &amp; what the video offers → 2) resolve &amp; download source → 3) propose candidate windows (audio + motion) → 4) confirm/score windows with a vision model → 5) score &amp; select to the time budget → <b>6) human approves clip list</b> → 7) render → <b>8) human approves share</b> → 9) deliver/upload.</td></tr>
+<tr><td><b>Tools</b></td><td>
+  <span class="tag-read">read</span> source&nbsp;resolver (yt-dlp/local),
+  <span class="tag-read">read</span> audio-peak detector,
+  <span class="tag-read">read</span> motion detector,
+  <span class="tag-read">read</span> vision classifier/scorer,
+  <span class="tag-read">read</span> clip selector,
+  <span class="tag-read">read</span> renderer (writes a <em>local</em> file),
+  <span class="tag-write">write</span> share/upload (behind a human gate).
+</td></tr>
+<tr><td><b>Memory</b></td><td><b>Session</b> (LangGraph <code>ReelState</code> + in-memory checkpointer): candidates, classifications, selected clips, approval flags. <b>Persistent</b> (local JSON file): user profile — jersey #, team colors, preferred moment types, default length, target platform — plus learned preferences from accept/reject feedback. (A durable store like SQLite is a drop-in swap; the current build persists to JSON.)</td></tr>
+<tr><td><b>Never do</b></td><td>Never upload/post without explicit approval. Never fabricate a moment label it isn't confident about (grounding). Never center non-subject minors (privacy). Never include recipe-listed exclusions (timeouts, bench, shaky pans…).</td></tr>
+<tr><td><b>Human-in-the-loop</b></td><td>Gate 1 — approve/reorder/drop the candidate clip list <em>before</em> render. Gate 2 — approve <em>before</em> any share/upload (write action). Plus a self-correction gate when highlights underfill the budget.</td></tr>
+<tr><td><b>On failure</b></td><td>Download fails → retry w/ backoff → ask for another link/local file. Vision errors → degrade to audio+motion score. Subject never found → ask to confirm jersey #, or fall back to team-level. Underfilled budget → ask: ship shorter / lower threshold / add footage.</td></tr>
+<tr><td><b>Success metric</b></td><td>User gets a reel they'd actually post 8/10 times, in &lt;10 min, from a single link — end-to-end task completion, not single-shot accuracy.</td></tr>
+</table>
+
+<h2>3 · Architecture</h2>
+<p>Recipe-driven LangGraph state machine. Cheap local signals <b>propose</b>, the vision model
+<b>confirms</b>, deterministic code <b>selects</b>, and humans gate the two write-ish actions. The
+layered diagram below runs top-down: two interfaces feed a <b>single</b> LangGraph agent (one shared
+<code>ReelState</code>), which sits on a state/memory layer, a swappable model layer, a tool layer, and
+the external services it calls. The <code>judge → select</code> revision loop is the one place the
+agent critiques and re-cuts its own output.</p>
+
+<img src="architecture.png"
+  alt="HypeReel architecture in six layers: (1) Streamlit web app and CLI interfaces; (2) a single LangGraph agent whose nodes run plan, ingest, propose, scoreboard, classify, select, judge, approve clips (human gate 1), render, summarize, approve share (human gate 2), deliver, with a judge-to-select revise loop; (3) state and memory — an in-memory checkpointer plus a local JSON profile store; (4) a swappable model layer of VisionProvider and LLMProvider defaulting to Nebius/Qwen2.5-VL with Groq, Gemini, and mock fallbacks; (5) a tool layer of yt-dlp, audio-peak and motion detectors, an OCR-free scoreboard reader, frame sampling into the vision model, and ffmpeg/moviepy; (6) external services YouTube and the Nebius API endpoint"
+  style="width:100%; border:1px solid var(--line); border-radius:10px; margin:1em 0" />
+
+<h2>4 · The Recipe (the intellectual core)</h2>
+<p>A <b>recipe</b> is the agent's declarative policy: it defines what counts as a highlight, how to
+find it, who to focus on, and how to assemble the reel. The same schema generalizes across domains;
+the pivotal field is:</p>
+<div class="callout"><b><code>highlight_model: event_based | quality_based | hybrid</code></b><br/>
+<b>event_based</b> (basketball): cheap signals propose discrete moments → vision model confirms the
+event + subject. <b>quality_based</b> (architecture): no discrete events — sample windows and have the
+vision model <em>score</em> them against a natural-language <code>scoring_rubric</code>; sustained
+high-scoring windows become clips. This one switch is how the design handles abstract, non-standardized
+domains.</div>
+
+<h3>Recipe sections</h3>
+<table>
+<tr><th>Section</th><th>Contains</th><th>Type</th></tr>
+<tr><td>Identity</td><td><code>id, name, domain, highlight_model, description</code></td><td><span class="pill det">deterministic</span></td></tr>
+<tr><td>Highlight definition</td><td><code>moment_types[]</code> (name + NL description = the LLM's rubric + weight + ideal_len); <code>scoring_rubric</code> for quality domains</td><td><span class="pill llm">llm-judged</span></td></tr>
+<tr><td>Signals</td><td>extractors with <code>role: proposer|scorer</code>, weight, <code>enabled_if</code></td><td><span class="pill det">deterministic</span></td></tr>
+<tr><td>Subject selector</td><td><code>type</code> (jersey_number / team_color / face_photo / feature_class / none), <code>value</code>, <code>audience: individual|team</code></td><td><span class="pill det">deterministic</span></td></tr>
+<tr><td>Selection</td><td>budget, min/max clip, lead in/out, min_score, ordering, coverage, dedup</td><td><span class="pill det">deterministic</span></td></tr>
+<tr><td>Style / output</td><td>transitions, audio, overlays, format, platform</td><td><span class="pill det">deterministic</span></td></tr>
+<tr><td>Guardrails</td><td><code>never_include</code>, privacy, grounding</td><td><span class="pill det">det</span> + <span class="pill llm">llm</span></td></tr>
+<tr><td>Acceptance</td><td>2–3 checks a QA step scores the finished reel against</td><td><span class="pill llm">llm-judged</span></td></tr>
+</table>
+
+<div class="grid">
+<div class="card"><b>Basketball — <code>event_based</code></b>
+<pre>highlight_model: event_based
+moment_types:
+  - {name: made_basket, weight: 1.0, ideal_len: 8}
+  - {name: block,       weight: 0.9, ideal_len: 6}
+  - {name: steal_break, weight: 0.8, ideal_len: 10}
+signals:
+  - {type: audio_peak,       role: proposer, weight: .4}
+  - {type: motion_intensity, role: proposer, weight: .3}
+  - {type: vision_classify,  role: scorer,   weight: .3}
+subject_selector:
+  {type: jersey_number, value: 23,
+   team_color: red, audience: individual}
+selection: {max_duration: 300, ordering: chronological,
+   coverage: "spread across 4 quarters"}
+style: {transitions: hard_cut, audio: keep_original,
+   overlays: [player_name, score], format: 16:9}</pre></div>
+
+<div class="card"><b>Architecture — <code>quality_based</code></b>
+<pre>highlight_model: quality_based
+moment_types:
+  - {name: facade_hero,     weight: 1.0, ideal_len: 6}
+  - {name: natural_light,   weight: 0.9, ideal_len: 5}
+  - {name: signature_feature, weight: .9, ideal_len: 6}
+scoring_rubric:
+  - {dim: composition, weight: .3}
+  - {dim: lighting,    weight: .3}
+  - {dim: subject_clarity, weight: .25}
+  - {dim: stability,   weight: .15}
+signals:
+  - {type: scene_stability, role: proposer, weight:.3}
+  - {type: vision_score,    role: scorer,   weight:.7}
+subject_selector: {type: feature_class,
+   value: [kitchen, staircase, exterior],
+   audience: team}
+style: {transitions: slow_crossfade, format: 9:16}</pre></div>
+</div>
+<p class="muted">Same eight sections, two very different domains — the proof the abstraction generalizes.
+For a brand-new domain, an LLM can <em>scaffold</em> the recipe from a prose description (future work).</p>
+
+<h2>5 · Control flow &amp; conditionals</h2>
+<table>
+<tr><th>Decision point</th><th>Condition</th><th>Branches</th></tr>
+<tr><td>Strategy planner</td><td>recipe.highlight_model + available signals</td><td>event pipeline · quality pipeline</td></tr>
+<tr><td>Source resolution</td><td>download success</td><td>proceed · retry (&lt;2) · ask human</td></tr>
+<tr><td>Commentary check</td><td>audio track has speech</td><td>transcript signal on · off</td></tr>
+<tr><td>Vision health</td><td>provider returns valid classification</td><td>use vision score · degrade to audio+motion</td></tr>
+<tr><td>Budget fill</td><td>Σ selected duration ≥ target × 0.8</td><td>proceed · self-correct (ask human)</td></tr>
+<tr><td>Clip approval</td><td>human decision</td><td>render · re-edit (+learn)</td></tr>
+<tr><td>Share approval</td><td>human decision</td><td>upload · save locally &amp; stop</td></tr>
+</table>
+
+<h2>6 · State &amp; memory</h2>
+<div class="grid">
+<div class="card"><b>Session (per run)</b><br/><span class="muted">LangGraph <code>ReelState</code> + in-memory checkpointer</span>
+<ul>
+<li>candidates, classifications (1:1)</li>
+<li>scored &amp; selected clips, proposed duration</li>
+<li>gate flags: <code>needs_human</code>, <code>human_gate</code>, <code>approved</code>, <code>shared</code></li>
+<li>errors, notes, mode (mock/live)</li>
+</ul>
+<span class="muted">Checkpointer also enables resuming an expensive extraction — handy for the live demo.</span>
+</div>
+<div class="card"><b>Persistent (across runs)</b><br/><span class="muted">local JSON file (SQLite/mem0-swappable)</span>
+<ul>
+<li>profile: jersey #, team colors, default length, platform</li>
+<li>preferred moment types</li>
+<li>learned prefs from accept/reject (e.g. "more 3-pointers, drop free throws")</li>
+</ul>
+</div>
+</div>
+
+<h2>7 · Human-in-the-loop boundary</h2>
+<p>Reads run autonomously; the two <b>write-ish</b> actions are gated, implemented with LangGraph
+<code>interrupt</code>s:</p>
+<ol>
+<li><b>Gate 1 — before render:</b> the agent presents the proposed clip list (timestamps, moment type, why chosen, subject-present). The human approves, reorders, or drops clips. Edits feed the preference learner.</li>
+<li><b>Gate 2 — before share:</b> rendering a <em>local</em> file is fine autonomously; <b>posting to a platform is a write action</b> and always requires explicit approval.</li>
+</ol>
+
+<h2>8 · Failure modes &amp; recovery</h2>
+<table>
+<tr><th>Failure</th><th>Detection</th><th>Recovery</th></tr>
+<tr><td>Bad/malformed recipe</td><td>Pydantic validation</td><td>Clean <code>RecipeError</code>, explained, before any work</td></tr>
+<tr><td>YouTube download fails</td><td>yt-dlp non-zero / exception</td><td>Retry ×2 w/ backoff → ask for another link/local file</td></tr>
+<tr><td>Vision provider down / no key</td><td>factory init / call error</td><td>Fall back to mock or to audio+motion-only scoring</td></tr>
+<tr><td>Subject never detected</td><td>0 windows with subject_present</td><td>Ask to confirm jersey #, or switch to team-level</td></tr>
+<tr><td>Budget underfilled</td><td>Σ duration &lt; 80% of target</td><td>Self-correct: ship shorter / lower threshold / add footage</td></tr>
+<tr><td>Clips overflow budget</td><td>Σ duration &gt; target</td><td>Knapsack trims to highest-value set</td></tr>
+</table>
+
+<h2>9 · Tech stack (free)</h2>
+<table>
+<tr><th>Layer</th><th>Choice</th><th>Cost</th></tr>
+<tr><td>Orchestration</td><td>LangGraph + LangChain-core</td><td>free/local</td></tr>
+<tr><td>Ingestion</td><td>yt-dlp</td><td>free/local</td></tr>
+<tr><td>Signals</td><td>librosa (audio), opencv (motion)</td><td>free/local</td></tr>
+<tr><td>Vision confirm/score</td><td>Gemini free tier · Groq · Nebius · <b>mock</b></td><td>free tiers / credits</td></tr>
+<tr><td>Summary/report (≥1 Nebius call)</td><td>Nebius Token Factory (OpenAI-compatible)</td><td>course credits</td></tr>
+<tr><td>Render</td><td>ffmpeg + moviepy</td><td>free/local</td></tr>
+<tr><td>UI</td><td>Streamlit</td><td>free/local</td></tr>
+</table>
+<div class="callout">Providers sit behind thin ABCs (<code>VisionProvider</code>, <code>LLMProvider</code>) built lazily
+by a factory. Missing key/SDK → graceful fallback to <code>mock</code>, so the pipeline always completes.
+The whole system runs offline with zero keys via <code>HYPEREEL_VISION_PROVIDER=mock</code>.</div>
+
+<h2>10 · Module map</h2>
+<pre>src/hypereel/
+  models.py            Pydantic contracts (recipe + runtime objects)
+  config.py            env/.env settings
+  recipe.py            load + validate recipe YAML  ->  Recipe
+  providers/           base ABCs · mock · gemini · groq · nebius · factory
+  ingest/              source_resolver (yt-dlp / local + retries)
+  signals/             audio (librosa) · motion (opencv) · merge windows
+  analyze/             classifier (sample frames -> VisionProvider)
+  select/              selector (knapsack to budget + coverage + ordering)
+  render/              renderer (moviepy/ffmpeg cut+concat+overlay)
+  memory/              persistent profile + learned preferences
+  graph/               state · nodes · build (conditional edges + interrupts)
+  app.py               Streamlit UI          cli.py  CLI / --demo
+recipes/               basketball_player.yaml · architecture_walkthrough.yaml
+tests/                 unit + end-to-end (mock) </pre>
+
+<h2>11 · Scope</h2>
+<div class="grid">
+<div class="card"><b>In scope (v1)</b>
+<ul>
+<li>One recipe deep: AAU basketball, jersey# + team-color</li>
+<li>YouTube ingestion (+ local fallback)</li>
+<li>audience switch (individual ↔ team)</li>
+<li>full agentic layer: planner, conditionals, 2 HITL gates, self-correction, failure recovery</li>
+<li>architecture recipe as a config stub (proves generalization)</li>
+</ul></div>
+<div class="card"><b>Out of scope / future</b>
+<ul>
+<li>real social-platform upload (gate is built; connector stubbed)</li>
+<li>full-length game live processing (runs offline; demo uses a short clip)</li>
+<li>LLM recipe scaffolding from prose</li>
+<li>face-recognition subject match</li>
+<li>trend dashboards across many reels</li>
+</ul></div>
+</div>
+
+<h2>12 · Decisions &amp; rejected alternatives</h2>
+<table>
+<tr><th>Decision</th><th>Why</th><th>Rejected</th></tr>
+<tr><td>Vision model as <b>confirmer</b>, not finder</td><td>Cheap signals bound the LLM's workload; keeps it agentic (branching) not one-shot; degrades gracefully</td><td>"LLM, watch the whole video" — one-shot, expensive, not agentic</td></tr>
+<tr><td>Jersey # + team color over face-match</td><td>Reliable on distant, blurry, fast sports footage; fast to build</td><td>Face recognition — unreliable at game distance</td></tr>
+<tr><td>Recipe abstraction</td><td>Generalizes across domains; makes "what is a highlight" declarative, not hardcoded</td><td>Basketball-specific logic — doesn't generalize, less impressive</td></tr>
+<tr><td>Track 2 (LangGraph)</td><td>Real state, checkpointer, interrupts for HITL, custom media tools</td><td>n8n — can't do local video processing</td></tr>
+<tr><td>Provider ABC + lazy factory + mock</td><td>Free/offline dev, one-line provider swap, satisfies Nebius requirement, never crashes on missing key</td><td>Hardwiring one paid SDK</td></tr>
+</table>
+
+<footer>
+HypeReel · Week 3 · The Gen Academy — Mastering Agentic AI. Design v0.1.
+Architecture diagram is a static image (<code>design/architecture.png</code>); the flow is also described in prose above.
+</footer>
+</body>
+</html>

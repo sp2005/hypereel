@@ -1,0 +1,90 @@
+# HypeReel recipe — generalization stub.
+#
+# Domain: real-estate/architecture walkthrough video. Unlike basketball there
+# are no discrete "events" to detect — instead the vision model scores sliding
+# windows against a natural-language rubric, and sustained high-scoring
+# windows become clips. Proves the same 8-section schema covers an abstract,
+# non-standardized domain. See design/HypeReel-Design.html section 4.
+
+id: architecture_walkthrough_v1
+name: "Architecture — Property Walkthrough Highlights"
+domain: architecture
+highlight_model: quality_based
+description: >
+  Builds a share-ready highlight reel from a raw property walkthrough by
+  scoring candidate windows against a composition/lighting/clarity rubric
+  instead of looking for discrete events, then keeping the sustained
+  highest-scoring segments across kitchen, staircase, and exterior features.
+
+moment_types:
+  - name: facade_hero
+    description: >
+      A wide, stable establishing shot of the building's exterior facade
+      that clearly shows its overall shape, materials, and curb appeal —
+      typically the opening or closing shot of a walkthrough.
+    weight: 1.0
+    ideal_len: 6
+
+  - name: natural_light
+    description: >
+      An interior shot where natural daylight is the dominant, flattering
+      light source — sunlit rooms, window light falling across a room, or a
+      bright open floor plan — rather than dim or harshly artificial lighting.
+    weight: 0.9
+    ideal_len: 5
+
+  - name: signature_feature
+    description: >
+      A shot that highlights one distinctive architectural or design feature
+      called out as a selling point: an open-concept kitchen island, a
+      statement staircase, vaulted ceilings, or a similar standout element.
+    weight: 0.9
+    ideal_len: 6
+
+scoring_rubric:
+  - dim: composition
+    weight: 0.3
+  - dim: lighting
+    weight: 0.3
+  - dim: subject_clarity
+    weight: 0.25
+  - dim: stability
+    weight: 0.15
+
+signals:
+  - type: scene_stability
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 5
+  - type: vision_score
+    role: scorer
+    weight: 0.7
+
+subject_selector:
+  type: feature_class
+  value: [kitchen, staircase, exterior]
+  audience: team
+
+selection:
+  max_duration: 90
+  min_clip: 4
+  max_clip: 8
+  ordering: best_first
+  coverage: "at least one clip per feature_class value"
+  dedup_overlap: true
+
+style:
+  transitions: slow_crossfade
+  audio: keep_original
+  format: "9:16"
+  platform: local
+
+guardrails:
+  never_include: [shaky_camera, cluttered_rooms]
+  privacy: "never center identifiable people (residents, agents, bystanders) in frame"
+  grounding: "only keep windows the vision scorer rates above min_score on the rubric — don't infer quality from proposer signals alone"
+
+acceptance:
+  - "reel includes at least one clip per feature_class (kitchen, staircase, exterior)"
+  - "no clip is dim, cluttered, or visibly shaky"

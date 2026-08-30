@@ -1,0 +1,106 @@
+# HypeReel recipe — team highlight reel for the DARK (blue/black) team.
+#
+# Domain: AAU basketball. Same game as the flagship recipe, but the subject is
+# an entire TEAM (the players in dark navy/black jerseys) rather than one
+# jersey number. The vision scorer must confirm the dark team — NOT the yellow
+# team — is the one making each play, or the window is dropped.
+#
+# NOTE: audience is intentionally left as "individual" so the selector keeps
+# its subject-present filter ON (see select/selector.py). With a team_color
+# subject that filter becomes "only keep plays made by the dark team".
+
+id: basketball_team_dark_v1
+name: "Basketball — Dark Team (Blue/Black) Highlights"
+domain: basketball
+highlight_model: event_based
+description: >
+  Builds a highlight reel for the team wearing dark navy/black jerseys from a
+  full AAU game recording: their baskets, threes, blocks, and steal-to-fast-break
+  sequences, spread across the whole game. Plays made by the opposing YELLOW
+  team must never appear.
+
+moment_types:
+  - name: made_basket
+    description: >
+      A player on the DARK navy/black team makes a two-point field goal — the
+      ball visibly passes through the hoop immediately after a dark-jersey
+      player's shot, release, or putback. Do NOT count free throws, and do NOT
+      count baskets scored by the YELLOW team.
+    weight: 1.0
+    ideal_len: 8
+
+  - name: three_pointer
+    description: >
+      A player on the DARK navy/black team makes a shot from behind the
+      three-point line. Look for the arc of the shot and teammate reaction at
+      the make; exclude misses and airballs, and exclude any shot by a YELLOW
+      jersey player.
+    weight: 1.2
+    ideal_len: 8
+
+  - name: block
+    description: >
+      A player on the DARK navy/black team blocks or clearly alters a YELLOW
+      player's shot attempt with their hand — the shot is deflected or knocked
+      away by a dark-jersey player, not merely contested from a distance.
+    weight: 0.9
+    ideal_len: 6
+
+  - name: steal_break
+    description: >
+      A player on the DARK navy/black team steals or deflects the ball away
+      from a YELLOW player and it leads directly into a fast break the dark
+      team is running or finishing. A steal with no resulting break does not
+      qualify on its own.
+    weight: 0.8
+    ideal_len: 10
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.4
+    params:
+      min_peak_db: -12
+  - type: motion_intensity
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.3
+
+subject_selector:
+  type: team_color
+  value: "dark navy/black team (not the yellow team)"
+  team_color: "dark navy/black jerseys (the opposing team wears bright yellow)"
+  audience: individual
+
+selection:
+  max_duration: 300
+  min_clip: 4
+  max_clip: 12
+  lead_in: 2
+  lead_out: 3
+  min_score: 0.5
+  ordering: chronological
+  coverage: "spread across the whole game, not clustered in one segment"
+  dedup_overlap: true
+
+style:
+  transitions: hard_cut
+  audio: keep_original
+  overlays: [team_name, score]
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [timeouts, bench_sequences, shaky_camera]
+  privacy: "never center or identify non-subject minors in the frame; blur or crop where the dark team is not the focal action"
+  grounding: "never label a moment_type the vision scorer isn't confident about — degrade to audio+motion score rather than fabricate an event; when unsure which team made the play, mark subject_present=false"
+
+acceptance:
+  - "every clip in the final reel shows the DARK navy/black team making the play"
+  - "no clip's highlighted play is made by the YELLOW team"
+  - "reel covers plays from across the whole game, not clustered in one segment"
+  - "no clip shows a timeout, bench sequence, or shaky/whip-pan camera work"

@@ -1,0 +1,151 @@
+# HypeReel recipe — individual highlight reel for #23 on the BLACK/RED team.
+#
+# Domain: basketball. Subject is jersey #23 of the team wearing black/red
+# jerseys (the opponent wears white with teal/green trim). The vision scorer
+# confirms the event AND that the subject — a black/red player, ideally #23 —
+# is the one making the play.
+#
+# IMPORTANT (source is 360p): at this resolution jersey NUMBERS are usually
+# unreadable, so the prompt treats "#23" as a preference and the BLACK/RED
+# JERSEY as the reliable filter. Plays clearly made by the white/teal team are
+# always dropped.
+
+id: basketball_player23_blackred_v1
+name: "Basketball — Unl (Black/Red Team) Highlights"
+domain: basketball
+highlight_model: event_based
+description: >
+  Builds a team highlight reel for the BLACK/RED team ("Unl" on the scoreboard,
+  jersey #23's team) from a full game recording: their made baskets, confirmed by
+  the scoreboard's own score changes. At 360p the jersey number isn't legible, so
+  the reel captures the team's scoring plays (with #23 as a preference) and never
+  the opposing white/teal team's baskets.
+
+moment_types:
+  - name: made_basket
+    description: >
+      The subject — a BLACK/RED jersey player (ideally #23) — makes a two-point
+      field goal: the ball passes through the hoop right after their shot,
+      jumper, or putback. Do NOT count free throws, misses, or any basket by the
+      white/teal team.
+    weight: 1.0
+    ideal_len: 8
+
+  - name: three_pointer
+    description: >
+      The subject (BLACK/RED jersey, ideally #23) makes a shot from behind the
+      three-point line — look for the shot arc and reaction at the make. Exclude
+      misses and any shot by a white/teal player.
+    weight: 1.3
+    ideal_len: 8
+
+  - name: layup_or_dunk
+    description: >
+      The subject (BLACK/RED jersey, ideally #23) finishes at the rim with a
+      driving layup, fast-break finish, or dunk. Exclude missed attempts and
+      white/teal finishers.
+    weight: 1.1
+    ideal_len: 8
+
+  - name: block
+    description: >
+      The subject (BLACK/RED jersey, ideally #23) blocks or clearly alters a
+      white/teal player's shot with their hand — deflected or swatted away, not
+      merely contested from a distance.
+    weight: 1.0
+    ideal_len: 6
+
+  - name: steal
+    description: >
+      The subject (BLACK/RED jersey, ideally #23) takes the ball from a
+      white/teal player — a pick-off or a strip — forcing a change of
+      possession.
+    weight: 0.9
+    ideal_len: 8
+
+  - name: rebound
+    description: >
+      The subject (BLACK/RED jersey, ideally #23) grabs a missed shot out of the
+      air, especially a contested board or an offensive rebound that keeps the
+      possession alive.
+    weight: 0.7
+    ideal_len: 6
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.4
+    params:
+      min_peak_db: -12
+  - type: motion_intensity
+    role: proposer
+    weight: 0.3
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.3
+  # Scoreboard game-state grounding (OCR-free). Reads the on-screen clock/score
+  # to crush dead-ball/timeout/sideline windows (frozen clock) and confirm real
+  # made baskets (score change). Regions are fractions of the frame, measured
+  # against this AAU overlay; weight 0 = it gates/boosts rather than adding to
+  # the blended proposer score. See signals/scoreboard.py.
+  - type: scoreboard
+    role: scorer
+    weight: 0.0
+    params:
+      dead_ball_factor: 0.15
+      made_basket_boost: 0.15
+      change_delta: 40.0     # per-pixel intensity change that counts
+      clock_frac: 0.012      # fraction of clock pixels changed -> clock is live
+      score_frac: 0.03       # fraction of score-box pixels changed -> a basket
+      # Two score boxes: index 0 = top row ("Elite", opponent), index 1 = bottom
+      # row ("Unl", the subject/black-red team). Regions are tightened onto the
+      # score DIGITS only — the wider originals caught the possession underline
+      # under "Unl" and produced ~4x phantom score changes.
+      subject_score_index: 1
+      clock_region: [0.084, 0.827, 0.144, 0.884]
+      score_regions:
+        - [0.058, 0.838, 0.084, 0.878]   # 0: Elite (opponent)
+        - [0.058, 0.895, 0.084, 0.930]   # 1: Unl (subject team)
+
+subject_selector:
+  # At 360p the jersey NUMBER is unreadable, so gating on "#23" specifically made
+  # the vision scorer drop almost every real play (subject_present=false). We gate
+  # on the thing the model CAN see — the BLACK/RED jersey — and keep #23 as a
+  # preference in the rubric. audience=individual keeps subject_present required,
+  # so plays by the white/teal opponent are still filtered out.
+  type: team_color
+  value: "a player on the BLACK/RED team (jersey #23 preferred when identifiable)"
+  team_color: "the subject team wears BLACK/RED jerseys; the opposing team wears WHITE with teal/green trim. Set subject_present=true when a BLACK/RED player is making the play, false when a white/teal player is. Jersey numbers are usually unreadable at this resolution, so do NOT require reading '#23' — the BLACK/RED jersey is the reliable indicator and #23 is only a preference"
+  audience: individual
+
+selection:
+  max_duration: 300
+  min_clip: 4
+  max_clip: 12
+  lead_in: 2
+  lead_out: 3
+  min_score: 0.5
+  ordering: chronological
+  coverage: "spread across the whole game, not clustered in one segment"
+  dedup_overlap: true
+
+style:
+  transitions: crossfade
+  audio: keep_original
+  overlays: [player_name, score]
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [timeouts, bench_sequences, shaky_camera, dead_ball_standing_around]
+  privacy: "never center or identify non-subject minors; keep the focus on the subject's live action"
+  grounding: "never label a moment_type the vision scorer isn't confident about — degrade to a lower score rather than fabricate a play; when it is unclear whether a black/red player made the play, mark subject_present=false"
+
+acceptance:
+  - "every clip shows a BLACK/RED jersey player (ideally #23) making the play"
+  - "no clip's highlighted play is made by the white/teal team"
+  - "clips show real basketball plays (basket, three, layup/dunk, block, steal, rebound), not padding"
+  - "plays are spread across the whole game and not clustered in one segment"
+  - "no clip shows a timeout, bench sequence, dead-ball standing around, or shaky camera work"

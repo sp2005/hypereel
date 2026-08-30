@@ -1,0 +1,34 @@
+# Full "everything" install (media + providers + UI + dev).
+# For just the offline demo and tests, you don't need this file — run
+#   pip install -e .            # core only (mock pipeline + tests)
+#   pip install -e ".[all]"     # same as installing this file
+# Extras are also available individually: .[media] .[providers] .[ui] .[dev]
+
+# ---- Core (required, light) ----
+pydantic>=2.6
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# ---- Agent framework ----
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# ---- Media processing (heavy; imported lazily so mock/tests don't need them) ----
+yt-dlp>=2024.0.0          # YouTube ingestion
+opencv-python>=4.8        # motion signal + frame sampling
+librosa>=0.10             # audio-energy signal
+soundfile>=0.12           # librosa backend
+moviepy>=1.0.3            # render (cut / concat / overlay)
+numpy>=1.24
+
+# ---- Model providers (install what you use; imported lazily) ----
+google-generativeai>=0.7  # Gemini (free tier, native video/vision)
+groq>=0.9                 # Groq (free tier, fast vision)
+openai>=1.30              # Nebius / Fireworks (OpenAI-compatible endpoints)
+
+# ---- UI ----
+streamlit>=1.30
+
+# ---- Dev / test ----
+pytest>=8.0
+pytest-mock>=3.12
