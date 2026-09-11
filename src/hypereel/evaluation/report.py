@@ -1,5 +1,6 @@
 """Local reports with separate synthetic/labeled groups and explicit denominators."""
 import json
+import html
 from pathlib import Path
 from .metrics import operational_success_rate
 
@@ -42,6 +43,34 @@ def _health_summary(cases):
             f"({successful}/{len(cases)} attempted cases).")
 
 
+def _judge_markdown(cases):
+    judged = [c for c in cases if "llm_judge" in c]
+    if not judged:
+        return []
+    lines = ["", "## LLM-as-a-Judge", "",
+             "Metadata-only review after deterministic evaluation; no video or audio was inspected. "
+             "Scores are advisory, from 0 to 1; N/A means insufficient evidence or no valid assessment. "
+             "They do not change deterministic metrics or case status.", "",
+             "| Case | Status | Provider | Relevance | Coverage | Coherence | Diversity | Overall |",
+             "|---|---|---|---:|---:|---:|---:|---:|"]
+    for case in judged:
+        judge = case["llm_judge"]
+        scores = judge.get("assessment") or {}
+        cells = [_cell(html.escape(str(value))) for value in (
+            case["case_id"], judge["status"], judge.get("actual_provider") or "N/A")]
+        cells += [_rate(scores.get(key)) for key in
+                  ("relevance", "coverage", "coherence", "diversity", "overall_score")]
+        lines.append("| " + " | ".join(cells) + " |")
+    lines += ["", "| Case | Reasoning / failure | Recommendations |", "|---|---|---|"]
+    for case in judged:
+        judge = case["llm_judge"]
+        assessment = judge.get("assessment") or {}
+        values = [case["case_id"], assessment.get("reasoning") or judge.get("error", "N/A"),
+                  "; ".join(assessment.get("recommendations", [])) or "None"]
+        lines.append("| " + " | ".join(_cell(html.escape(str(v))) for v in values) + " |")
+    return lines
+
+
 def write_report(report: dict, output_dir: str | Path) -> Path:
     output = Path(output_dir)
     if output.exists() and any(output.iterdir()):
@@ -81,6 +110,7 @@ def write_report(report: dict, output_dir: str | Path) -> Path:
         lines.append(f"| {_cell(case['case_id'])} | {case['status']} | {m.get('clip_count', 'N/A')} | "
                      f"{m.get('selected_duration_seconds', 'N/A')} | {_rate(m.get('candidate_recall'))} | {case['elapsed_seconds']:.6f} | "
                      f"{_cell(case.get('error') or '; '.join(case.get('degradation_reasons', [])))} |")
+    lines.extend(_judge_markdown(report["cases"]))
     (output / "summary.md").write_text("\n".join(lines) + "\n")
     return output
 
@@ -107,6 +137,7 @@ def append_iteration_history(report: dict, history_path: str | Path, change_note
             "estimated_provider_cumulative_spend_usd": case.get(
                 "estimated_provider_cumulative_spend_usd"
             ),
+            **({"llm_judge": case["llm_judge"]} if "llm_judge" in case else {}),
         } for case in report["cases"]],
     }
     with path.open("a", encoding="utf-8") as stream:

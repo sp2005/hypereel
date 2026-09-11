@@ -19,6 +19,8 @@ def main(argv=None) -> int:
     run.add_argument("--history", type=Path, default=Path("evals/iterations/history.jsonl"),
                      help="append-only machine-readable history for pipeline runs")
     run.add_argument("--change-note", default="", help="what changed since the prior run")
+    run.add_argument("--judge", action="store_true",
+                     help="request an LLM review of clip metadata after metrics (may incur API cost)")
     args = parser.parse_args(argv)
     try:
         if args.mode == "pipeline" and not args.change_note.strip():
@@ -29,7 +31,7 @@ def main(argv=None) -> int:
         if output.exists() and (not output.is_dir() or any(output.iterdir())):
             raise ValueError(f"output must be a new or empty directory: {output}")
         runner = run_pipeline_evaluation if args.mode == "pipeline" else run_selection
-        report = runner(args.dataset)
+        report = runner(args.dataset, judge=True) if args.judge else runner(args.dataset)
         write_report(report, output)
         if args.mode == "pipeline":
             append_iteration_history(report, args.history, args.change_note.strip())
@@ -39,6 +41,9 @@ def main(argv=None) -> int:
     print(f"Evaluated {report['case_count']} case(s); failed: {report['failed_count']}")
     if report.get("degraded_count"):
         print(f"Degraded: {report['degraded_count']} (excluded from quality averages)")
+    if args.judge:
+        judged = sum(c.get("llm_judge", {}).get("status") == "success" for c in report["cases"])
+        print(f"LLM judge: {judged}/{report['case_count']} assessments available (see report for details)")
     print(f"Report: {output / 'summary.md'}")
     return 1 if report["failed_count"] or report.get("degraded_count") else 0
 

@@ -147,3 +147,87 @@ per-case `metrics.candidate_recall`, overall `operational_success_rate`, and
 
 The repository's real-video HoopIQ benchmark and interpretation rules are
 documented in `evals/REFERENCE_BENCHMARK.md`.
+
+## Optional post-evaluation LLM-as-a-Judge
+
+Add `--judge` to either evaluation mode to request a separate LLM assessment
+**after deterministic metrics have been computed**:
+
+```bash
+python -m hypereel.evaluation run --mode selection --dataset evals/datasets/smoke.jsonl --judge
+```
+
+For a pipeline run, keep the existing `--change-note` requirement:
+
+```bash
+python -m hypereel.evaluation run --mode pipeline --dataset YOUR_DATASET.jsonl --change-note "add advisory judge" --judge
+```
+
+Configure the existing `HYPEREEL_LLM_PROVIDER` and matching API key in `.env`.
+Calls can incur API cost. No new provider or SDK is introduced. The default is
+**off**, so existing commands and the production graph behave as before. Mock
+providers (including fallback to mock) skip judging rather than invent scores.
+Failed/degraded evaluation cases are also skipped. An empty successful reel can
+be assessed to explain what is missing. The shipped smoke dataset is synthetic
+and cannot demonstrate real-video quality, even with a live judge.
+
+The judge receives recipe intent, the selected edit list, computed metrics,
+available reference events, and evaluation scope. It does not receive source
+media, source URLs, API keys, or the production judge's verdict. Recipe and clip
+strings are explicitly treated as untrusted evidence, not instructions.
+
+**This is a metadata-only judgment.** The existing LLM abstraction accepts text
+and pipeline evaluation stops before rendering. Coherence means ordering and
+continuity inferable from the edit list, not verified audiovisual editing.
+Actual rendered-video quality requires a future multimodal evaluation interface.
+
+Successful output is stored as `cases[i].llm_judge.assessment`:
+
+```json
+{
+  "relevance": 0.8,
+  "coverage": null,
+  "coherence": 0.7,
+  "diversity": 0.6,
+  "overall_score": 0.75,
+  "reasoning": "Assessment based on clip metadata; complete coverage is unknown.",
+  "recommendations": ["Review the boundaries of the selected plays."]
+}
+```
+
+All seven fields are required. Scores are finite numbers in [0,1] or null when
+unsupported; coverage must be null without exhaustive reference evidence.
+Reasoning is a bounded string and recommendations is a bounded array of strings.
+JSON/code-fenced JSON is accepted, while missing/extra fields, duplicate keys,
+non-numeric scores, invalid ranges, and malformed JSON are rejected. There is no
+repair retry or fabricated fallback score.
+
+The envelope records `success`, `skipped`, `invalid_response`, or `unavailable`,
+plus rubric version, prompt hash, provider, elapsed time, trace correlation, and
+provider usage where exposed by existing adapters. Judge scores never enter
+metric aggregates or alter selected clips, operational status, or exit codes.
+Judge issues are visible in CLI output and Markdown; they do not erase a valid
+deterministic evaluation. Existing `elapsed_seconds` excludes this new judge;
+`llm_judge.elapsed_seconds` measures it separately.
+
+Markdown adds score and reasoning/recommendation tables. JSON, JSONL, and
+append-only iteration history retain the structured judge envelope separately
+from the production `judge_verdict`. Estimated judge spend is likewise separate
+from the original pipeline spend. The existing budget scope/ledger is reused,
+and consumed pipeline call allowances are deducted before judging. Cost tracking
+and enforcement depend on the existing provider adapter's budget instrumentation;
+this PR does not broaden that instrumentation to other providers.
+
+Enable the existing `HYPEREEL_TRACING_ENABLED`, `LANGSMITH_API_KEY`, and
+`LANGSMITH_PROJECT` settings for a root `evaluation.llm_judge` trace and nested
+provider trace. Correlation metadata contains the evaluation run/case IDs and
+prior pipeline trace execution ID. This is a separate post-processing trace, not
+an extra production graph node. Existing input/output hiding is retained; use the
+local report for scores and reasoning. Upload failures do not retry model calls.
+
+Python callers can use `run_selection(path, judge=True, settings=settings)` or
+`run_pipeline_evaluation(path, settings=settings, judge=True)`.
+
+Before using these advisory scores as release gates, validate the rubric against
+human reviews and measure agreement; self-review by the generation model is not
+independent evidence of correctness.

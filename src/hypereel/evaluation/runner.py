@@ -13,18 +13,22 @@ from .dataset import load_dataset
 from .metrics import candidate_recall, operational_success_rate, selection_metrics
 
 
-def run_selection(dataset_path: str | Path) -> dict:
-    return _run(dataset_path)
+def run_selection(dataset_path: str | Path, *, judge: bool = False, settings=None) -> dict:
+    return _run(dataset_path, judge=judge, settings=settings)
 
 
-def run_pipeline_evaluation(dataset_path: str | Path, settings=None) -> dict:
+def run_pipeline_evaluation(dataset_path: str | Path, settings=None, *, judge: bool = False) -> dict:
     """Evaluate graph predictions at its first human gate; never auto-approve."""
     from ..config import get_settings
-    return _run(dataset_path, mode="pipeline", settings=settings or get_settings())
+    return _run(dataset_path, mode="pipeline", settings=settings or get_settings(), judge=judge)
 
 
-def _run(dataset_path, *, mode="selection", settings=None) -> dict:
+def _run(dataset_path, *, mode="selection", settings=None, judge=False) -> dict:
     path = Path(dataset_path).resolve()
+    evaluation_run_id = str(uuid4())
+    if judge and settings is None:
+        from ..config import get_settings
+        settings = get_settings()
     if mode == "pipeline":
         from .schemas import PipelineCase
         cases = load_dataset(path, PipelineCase)
@@ -65,6 +69,17 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
             result["error"] = f"{type(exc).__name__}: {exc}"
         finally:
             result["elapsed_seconds"] = perf_counter() - start
+            if judge:
+                if result["status"] == "success":
+                    from .judge import judge_reel
+                    result["llm_judge"] = judge_reel(
+                        result, recipe, case, settings, evaluation_run_id=evaluation_run_id,
+                    )
+                else:
+                    result["llm_judge"] = {
+                        "status": "skipped", "assessment": None, "basis": "metadata_only",
+                        "error": "case failed or degraded; judge skipped",
+                    }
             results.append(result)
     try:
         revision = subprocess.run(
@@ -79,7 +94,7 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
         revision, dirty = None, None
     return {
         "schema_version": 1, "metric_version": "selection-v6", "mode": mode,
-        "evaluation_run_id": str(uuid4()),
+        "evaluation_run_id": evaluation_run_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset_path": str(path), "dataset_sha256": sha256(path.read_bytes()).hexdigest(),
         "code_revision": revision, "working_tree_dirty": dirty,
