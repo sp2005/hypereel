@@ -96,14 +96,14 @@ def test_parse_classification_json_handles_fenced_block(basketball_recipe) -> No
     text = (
         '```json\n'
         '{"moment_type":"made_basket","subject_present":true,'
-        '"confidence":0.8,"reason":"x"}\n'
+        '"confidence":0.8,"reason":"ball goes through the rim"}\n'
         '```'
     )
     result = parse_classification_json(text, basketball_recipe)
     assert result.moment_type == "made_basket"
     assert result.subject_present is True
     assert result.confidence == 0.8
-    assert result.reason == "x"
+    assert result.reason == "ball goes through the rim"
 
 
 def test_parse_classification_json_rejects_unknown_moment_type(basketball_recipe) -> None:
@@ -116,6 +116,19 @@ def test_parse_classification_json_handles_garbage(basketball_recipe) -> None:
     result = parse_classification_json("not json at all", basketball_recipe)
     assert result.moment_type is None
     assert result.confidence == 0.0
+
+
+def test_parse_classification_json_uses_first_object_when_model_appends_text(
+    basketball_recipe,
+) -> None:
+    text = (
+        '{"moment_type":"made_basket","subject_present":true,'
+        '"confidence":0.9,"reason":"ball goes through the rim"}\n'
+        '{"extra":"ignored"}'
+    )
+    result = parse_classification_json(text, basketball_recipe)
+    assert result.moment_type == "made_basket"
+    assert result.confidence == 0.9
 
 
 # --------------------------------------------------------------------------- #

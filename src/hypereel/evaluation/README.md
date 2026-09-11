@@ -108,15 +108,15 @@ To run the package-local integration tests:
 python -m pytest tests src/hypereel/evaluation/tests
 ```
 
-## Candidate recall, final quality, and operational success (selection-v3)
+## Candidate recall, final quality, and operational success (selection-v4)
 
 Both selection replay and pipeline evaluation report `candidate_recall`:
 
 ```text
-annotated events with a timestamp inside at least one candidate / annotated events
+annotated action intervals overlapping at least one candidate / annotated events
 ```
 
-Containment is `candidate.start <= event_time < candidate.end`. Predicted labels,
+Overlap is `candidate.start < action_end and action_start < candidate.end`. Predicted labels,
 classification confidence, subject filtering, and the final clip budget do not
 participate. Each annotated event counts once even when multiple windows cover it.
 No candidates with nonempty references gives 0; missing or empty references gives
@@ -139,7 +139,7 @@ errors occur before case execution and are not attempted cases. This measures
 execution health under the runner's existing status detection, not AI correctness.
 No status detection or production pipeline behavior was changed.
 
-The report's metric version is now `selection-v3`. Final selection also reports
+The report's metric version is now `selection-v4`. Final selection also reports
 `selected_event_recall` and, when annotations are exhaustive, `selection_f1`.
 JSON reports expose
 per-case `metrics.candidate_recall`, overall `operational_success_rate`, and

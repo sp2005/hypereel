@@ -11,7 +11,11 @@ from __future__ import annotations
 from typing import Sequence
 
 from ..config import Settings
-from ..observability import record_provider_failure
+from ..observability import (
+    authorize_provider_call,
+    record_provider_failure,
+    record_provider_usage,
+)
 from ..models import Classification, Recipe
 from .base import LLMProvider, VisionProvider
 from ._util import (
@@ -52,10 +56,14 @@ class OpenAICompatVisionProvider(VisionProvider):
                     {"type": "image_url", "image_url": {"url": frame_to_data_uri(raw)}}
                 )
 
+            authorize_provider_call(
+                provider=self.name, model=self._model, operation="vision_classification"
+            )
             completion = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": content}],
             )
+            record_provider_usage(completion)
             text = completion.choices[0].message.content or ""
             return parse_classification_json(text, recipe)
         except Exception as exc:
@@ -84,11 +92,15 @@ class OpenAICompatLLMProvider(LLMProvider):
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
+            authorize_provider_call(
+                provider=self.name, model=self._model, operation="quality_judge"
+            )
             completion = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,
                 max_tokens=max_tokens,
             )
+            record_provider_usage(completion)
             return completion.choices[0].message.content or ""
         except Exception as exc:
             record_provider_failure(exc)

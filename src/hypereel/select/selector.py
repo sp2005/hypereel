@@ -194,6 +194,10 @@ def score_candidates(
             # Effective moment_type may be upgraded from a scoreboard-confirmed
             # make when the vision model was too unsure to name the play.
             moment_type = _confirm_moment(window, classification, sb_cfg)
+            # A high motion score is not semantic evidence. Never emit an
+            # unclassified clip unless a configured grounding signal upgraded it.
+            if moment_type is None:
+                continue
             score = _combined_score(window, classification, recipe)
             # Ground the score in game state (dead-ball crush / made-basket boost)
             # *before* the min_score gate, so timeouts/sidelines are filtered out.

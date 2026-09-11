@@ -81,7 +81,15 @@ def classify_candidates(
     results: list[Classification] = []
     for i, window in enumerate(candidates):
         try:
-            frame_paths = extract_frames(video_path, window, settings.frames_per_candidate, frames_dir)
+            context = max(0.0, settings.classification_context_seconds)
+            frame_window = CandidateWindow(
+                start=max(0.0, window.start - context),
+                end=window.end + context,
+                signal_scores=window.signal_scores,
+            )
+            frame_paths = extract_frames(
+                video_path, frame_window, settings.frames_per_candidate, frames_dir
+            )
             classification = provider.classify_window(frame_paths, recipe, window_index=i)
         except Exception:
             classification = Classification(confidence=0.0, reason="classification error")

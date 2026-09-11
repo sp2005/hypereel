@@ -14,7 +14,8 @@ def candidate_recall(
     """
     if not events:
         return None
-    covered = sum(any(w.start <= e.event_time < w.end for w in candidates) for e in events)
+    covered = sum(any(w.start < e.action_end and e.action_start < w.end
+                      for w in candidates) for e in events)
     return covered / len(events)
 
 
@@ -30,14 +31,15 @@ def operational_success_rate(cases: list[dict]) -> float | None:
 
 
 def match_events(clips: list[Clip], events: list[ReferenceEvent]) -> list[tuple[int, int]]:
-    """Maximum-cardinality, one-to-one matching by label and contained event time.
+    """Maximum-cardinality, one-to-one matching by label and action overlap.
 
-    Stable input order breaks ties. This version uses timestamp containment,
-    not an adjustable IoU threshold. Matches are not optimized for completeness.
+    Stable input order breaks ties. Any positive overlap with the externally
+    supplied action interval is eligible; temporal errors are reported separately.
     """
     edges = [[j for j, event in enumerate(events)
               if clip.moment_type == event.moment_type
-              and clip.start <= event.event_time < clip.end] for clip in clips]
+              and clip.start < event.action_end
+              and event.action_start < clip.end] for clip in clips]
     owners: dict[int, int] = {}
 
     def assign(i, seen):
@@ -71,6 +73,35 @@ def selection_metrics(clips: list[Clip], *, budget: float, video_duration: float
           if precision is not None and recall is not None and precision + recall else None)
     complete = sum(clips[i].start <= events[j].action_start
                    and clips[i].end >= events[j].action_end for i, j in matches)
+    matched_clip_indexes = {i for i, _ in matches}
+    matched_event_indexes = {j for _, j in matches}
+    moment_types = sorted({c.moment_type for c in clips if c.moment_type}
+                          | {e.moment_type for e in events or []})
+    per_type = {}
+    for moment_type in moment_types:
+        tp = sum(clips[i].moment_type == moment_type for i, _ in matches)
+        fp = sum(i not in matched_clip_indexes and c.moment_type == moment_type
+                 for i, c in enumerate(clips))
+        fn = sum(j not in matched_event_indexes and e.moment_type == moment_type
+                 for j, e in enumerate(events or []))
+        type_precision = tp / (tp + fp) if tp + fp else None
+        type_recall = tp / (tp + fn) if tp + fn else None
+        type_f1 = (2 * type_precision * type_recall / (type_precision + type_recall)
+                   if type_precision is not None and type_recall is not None
+                   and type_precision + type_recall else None)
+        per_type[moment_type] = {
+            "tp": tp, "fp": fp, "fn": fn,
+            "precision": type_precision, "recall": type_recall, "f1": type_f1,
+        }
+    class_f1s = [row["f1"] for row in per_type.values() if row["f1"] is not None]
+    class_recalls = [row["recall"] for row in per_type.values() if row["recall"] is not None]
+    timing_offsets = [abs((clips[i].start + clips[i].end) / 2 - events[j].event_time)
+                      for i, j in matches]
+    boundary_errors = [
+        (abs(clips[i].start - events[j].action_start)
+         + abs(clips[i].end - events[j].action_end)) / 2
+        for i, j in matches
+    ]
     return {
         "clip_count": len(clips),
         "selected_duration_seconds": duration,
@@ -83,6 +114,19 @@ def selection_metrics(clips: list[Clip], *, budget: float, video_duration: float
         "relevant_clip_precision": precision,
         "selected_event_recall": recall,
         "selection_f1": f1,
+        "macro_f1": sum(class_f1s) / len(class_f1s) if class_f1s else None,
+        "balanced_accuracy": (sum(class_recalls) / len(class_recalls)
+                              if class_recalls else None),
+        "mean_event_time_error_seconds": (sum(timing_offsets) / len(timing_offsets)
+                                          if timing_offsets else None),
+        "mean_boundary_error_seconds": (sum(boundary_errors) / len(boundary_errors)
+                                        if boundary_errors else None),
         "action_completeness": complete / len(matches) if matches else None,
         "distinct_moment_types": len({c.moment_type for c in clips if c.moment_type}),
+        "confusion_counts": {
+            "tp": len(matches),
+            "fp": len(clips) - len(matched_clip_indexes),
+            "fn": len(events or []) - len(matched_event_indexes),
+        } if events is not None else None,
+        "per_moment_type": per_type if events is not None else None,
     }, [{"clip_index": i, "event_id": events[j].event_id} for i, j in matches]

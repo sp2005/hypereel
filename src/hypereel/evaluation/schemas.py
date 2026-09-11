@@ -75,6 +75,9 @@ class PipelineCase(BaseModel):
     audience: Literal["individual", "team"] | None = None
     subject_description: str | None = None
     max_candidates: int | None = Field(default=None, gt=0)
+    candidate_sampling: Literal["chronological", "spread"] = "chronological"
+    evaluation_start_seconds: float | None = Field(default=None, ge=0)
+    evaluation_end_seconds: float | None = Field(default=None, gt=0)
     reference_events: list[ReferenceEvent] | None = None
     exhaustive: bool = False
 
@@ -87,4 +90,8 @@ class PipelineCase(BaseModel):
             raise ValueError("exhaustive annotations require reference_events")
         if self.source.startswith("demo://") and not self.synthetic:
             raise ValueError("demo sources must be marked synthetic")
+        if (self.evaluation_start_seconds is not None
+                and self.evaluation_end_seconds is not None
+                and self.evaluation_start_seconds >= self.evaluation_end_seconds):
+            raise ValueError("evaluation_start_seconds must be before evaluation_end_seconds")
         return self

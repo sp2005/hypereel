@@ -8,7 +8,8 @@ def aggregate(cases: list[dict]) -> dict:
     groups = {}
     for synthetic, name in ((True, "synthetic"), (False, "non_synthetic")):
         subset = [c for c in cases if c["synthetic"] == synthetic]
-        keys = sorted({k for c in subset for k in c["metrics"]})
+        keys = sorted({k for c in subset for k, v in c["metrics"].items()
+                       if v is None or isinstance(v, (int, float, bool))})
         groups[name] = {
             "case_count": len(subset),
             "failed_count": sum(c["status"] == "failed" for c in subset),
@@ -18,7 +19,8 @@ def aggregate(cases: list[dict]) -> dict:
         }
         for key in keys:
             values = [c["metrics"][key] for c in subset
-                      if c["status"] == "success" and c["metrics"].get(key) is not None]
+                      if c["status"] == "success"
+                      and isinstance(c["metrics"].get(key), (int, float, bool))]
             groups[name]["metrics"][key] = {
                 "macro_mean": sum(values) / len(values) if values else None,
                 "applicable_cases": len(values),
@@ -70,7 +72,7 @@ def write_report(report: dict, output_dir: str | Path) -> Path:
             mean = "N/A" if value["macro_mean"] is None else f"{value['macro_mean']:.4f}"
             lines.append(f"| {metric} | {mean} | {value['applicable_cases']} |")
         lines.append("")
-    lines += ["Candidate recall counts each annotated event once when its timestamp falls inside any candidate window. "
+    lines += ["Candidate recall counts each annotated event once when its action interval overlaps any candidate window. "
               "Missing/empty references are N/A; partial labels measure only the annotated subset.", "",
               "## Cases", "", "| Case | Status | Clips | Duration | Candidate recall | Elapsed seconds | Error |",
               "|---|---|---:|---:|---:|---:|---|"]

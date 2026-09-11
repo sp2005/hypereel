@@ -36,6 +36,9 @@ class ReelState(TypedDict, total=False):
     max_duration: Optional[float]   # user override of recipe.selection.max_duration
     audience: Optional[str]         # user override: "individual" | "team"
     max_candidates: Optional[int]   # quick-test cap: classify only the first N windows (None = all)
+    candidate_sampling: str
+    evaluation_start_seconds: Optional[float]
+    evaluation_end_seconds: Optional[float]
 
     # ---- ingest ----
     video_path: Optional[str]
@@ -46,6 +49,7 @@ class ReelState(TypedDict, total=False):
     strategy: str                   # planner's chosen strategy family
     active_signals: list[str]       # signal types the planner enabled
     candidates: list[CandidateWindow]
+    uncapped_candidates: list[CandidateWindow]  # proposer output before quick-test truncation
     classifications: list[Classification]   # aligned 1:1 with candidates
 
     # ---- selection / render ----
@@ -101,12 +105,16 @@ def new_state(source: str, recipe: Recipe, **overrides: Any) -> ReelState:
         "max_duration": overrides.get("max_duration"),
         "audience": overrides.get("audience"),
         "max_candidates": overrides.get("max_candidates"),
+        "candidate_sampling": overrides.get("candidate_sampling", "chronological"),
+        "evaluation_start_seconds": overrides.get("evaluation_start_seconds"),
+        "evaluation_end_seconds": overrides.get("evaluation_end_seconds"),
         "video_path": None,
         "video_duration": 0.0,
         "has_commentary": False,
         "strategy": "",
         "active_signals": [],
         "candidates": [],
+        "uncapped_candidates": [],
         "classifications": [],
         "scored_clips": [],
         "selected_clips": [],

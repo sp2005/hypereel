@@ -131,7 +131,20 @@ def propose_node(state: ReelState, settings=None) -> dict:
     candidates = propose_candidates(
         state.get("video_path"), state.get("video_duration", 0.0), recipe, settings
     )
+    uncapped_candidates = list(candidates)
     notes = state.get("notes", []) + [f"propose: {len(candidates)} candidate window(s) generated"]
+
+    slice_start = state.get("evaluation_start_seconds")
+    slice_end = state.get("evaluation_end_seconds")
+    if slice_start is not None or slice_end is not None:
+        candidates = [w for w in candidates
+                      if (slice_start is None or w.end > slice_start)
+                      and (slice_end is None or w.start < slice_end)]
+        notes.append(
+            f"propose: evaluation slice [{slice_start or 0:.1f}, "
+            f"{slice_end if slice_end is not None else float('inf'):.1f}) kept "
+            f"{len(candidates)} window(s)"
+        )
 
     # Quick-test cap: classify only the first N windows so a prompt/recipe change
     # can be validated in ~1 min of API spend instead of a full pass. Windows are
@@ -139,11 +152,20 @@ def propose_node(state: ReelState, settings=None) -> dict:
     cap = state.get("max_candidates")
     if cap and cap > 0 and len(candidates) > cap:
         ordered = sorted(candidates, key=lambda w: w.start)[:cap]
-        notes.append(f"propose: quick-test cap ON — kept the first {cap} of {len(candidates)} windows")
+        if state.get("candidate_sampling") == "spread":
+            source = sorted(candidates, key=lambda w: w.start)
+            indexes = [round(i * (len(source) - 1) / (cap - 1)) for i in range(cap)] \
+                if cap > 1 else [len(source) // 2]
+            ordered = [source[i] for i in indexes]
+        notes.append(
+            f"propose: quick-test cap ON — kept {cap} of {len(candidates)} windows "
+            f"using {state.get('candidate_sampling', 'chronological')} sampling"
+        )
         candidates = ordered
 
     update = {
         "candidates": candidates,
+        "uncapped_candidates": uncapped_candidates,
         "active_signals": [s.type for s in recipe.proposer_signals()],
         "notes": notes,
     }

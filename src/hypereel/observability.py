@@ -8,9 +8,13 @@ Imports and client creation happen only when tracing is explicitly enabled.
 from __future__ import annotations
 
 import logging
+import json
+import os
+from pathlib import Path
 from uuid import uuid4
 from collections.abc import Callable
 from typing import TypeVar
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from .config import Settings
@@ -18,6 +22,90 @@ from .config import Settings
 _log = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _provider_failures: ContextVar[list[str] | None] = ContextVar("provider_failures", default=None)
+_provider_budget: ContextVar[dict | None] = ContextVar("provider_budget", default=None)
+
+
+class ProviderBudgetExceeded(RuntimeError):
+    """Raised before a provider request would exceed a configured run cap."""
+
+
+@contextmanager
+def provider_budget_scope(settings: Settings):
+    """Track provider usage and enforce request/spend caps for one evaluation case."""
+    ledger_path = settings.provider_spend_ledger_path
+    spent_before = 0.0
+    if ledger_path:
+        try:
+            spent_before = float(json.loads(Path(ledger_path).read_text()).get("estimated_spend_usd", 0))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            spent_before = 0.0
+    state = {
+        "calls": [],
+        "attempted_calls": 0,
+        "estimated_spend_usd": 0.0,
+        "estimated_spend_before_run_usd": spent_before,
+        "ledger_path": ledger_path,
+        "max_calls": settings.max_provider_calls,
+        "max_spend_usd": settings.max_provider_spend_usd,
+        "reserve_usd": settings.provider_call_reserve_usd,
+        "input_rate": settings.nebius_input_cost_per_million_usd,
+        "output_rate": settings.nebius_output_cost_per_million_usd,
+    }
+    token = _provider_budget.set(state)
+    try:
+        yield state
+    finally:
+        _provider_budget.reset(token)
+
+
+def authorize_provider_call(*, provider: str, model: str, operation: str) -> None:
+    state = _provider_budget.get()
+    if state is None:
+        return
+    if state["max_calls"] > 0 and state["attempted_calls"] >= state["max_calls"]:
+        raise ProviderBudgetExceeded("provider request cap reached")
+    if (state["max_spend_usd"] > 0
+            and state["estimated_spend_before_run_usd"]
+            + state["estimated_spend_usd"] + state["reserve_usd"]
+            > state["max_spend_usd"]):
+        raise ProviderBudgetExceeded("provider spend cap reached")
+    state["attempted_calls"] += 1
+    state["calls"].append({
+        "provider": provider,
+        "model": model,
+        "operation": operation,
+        "status": "started",
+        "reserved_cost_usd": state["reserve_usd"],
+    })
+
+
+def record_provider_usage(completion, *, status: str = "success") -> None:
+    state = _provider_budget.get()
+    if state is None or not state["calls"]:
+        return
+    usage = getattr(completion, "usage", None)
+    prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+    output = int(getattr(usage, "completion_tokens", 0) or 0)
+    estimated = (
+        prompt * state["input_rate"] / 1_000_000
+        + output * state["output_rate"] / 1_000_000
+    )
+    call = state["calls"][-1]
+    call.update({
+        "status": status,
+        "prompt_tokens": prompt,
+        "completion_tokens": output,
+        "total_tokens": prompt + output,
+        "estimated_cost_usd": estimated,
+    })
+    state["estimated_spend_usd"] += estimated
+    if state["ledger_path"]:
+        path = Path(state["ledger_path"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        total = state["estimated_spend_before_run_usd"] + state["estimated_spend_usd"]
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps({"estimated_spend_usd": total}, indent=2) + "\n")
+        os.replace(temporary, path)
 
 
 def record_provider_failure(error: Exception) -> None:

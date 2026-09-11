@@ -71,6 +71,21 @@ def build_classification_prompt(recipe: Recipe) -> str:
         reject_lines.append(f"Grounding rule: {guard.grounding}")
     reject_block = "\n".join(f"- {line}" for line in reject_lines)
 
+    temporal_guidance = ""
+    if recipe.domain.lower() == "basketball":
+        temporal_guidance = (
+            "\nBasketball temporal checks:\n"
+            "- Treat the images as an ordered sequence, not independent pictures. "
+            "Compare who controls the ball in the first and last frames.\n"
+            "- A steal requires visible evidence that the defending team gains or "
+            "deflects possession; a rebound after a shot is not a steal.\n"
+            "- A made basket requires visible outcome evidence (ball through the rim/net "
+            "or unmistakable immediate aftermath). A ball in the air is only an attempt.\n"
+            "- A three_pointer additionally requires clear evidence that the shooter was "
+            "behind the three-point line. If distance or make is unclear, do not guess.\n"
+            "- Prefer null when the ordered frames do not establish the complete event.\n"
+        )
+
     return (
         "You are judging a short video clip (sampled frames shown in order) for a "
         "highlight-reel agent.\n\n"
@@ -80,7 +95,8 @@ def build_classification_prompt(recipe: Recipe) -> str:
         "Rejection rules (apply these first):\n"
         f"{reject_block}\n\n"
         "Look at the frames and decide whether this window contains one of the "
-        "moment types above and whether the subject is visible.\n\n"
+        "moment types above and whether the subject is visible.\n"
+        f"{temporal_guidance}\n"
         "Respond with STRICT JSON only, no prose, no markdown fences, matching "
         "exactly this shape:\n"
         '{"moment_type": <string or null>, "subject_present": <true|false>, '
@@ -105,7 +121,7 @@ def frame_to_data_uri(raw: bytes, mime: str = "image/jpeg") -> str:
     return f"data:{mime};base64,{encoded}"
 
 
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+_JSON_OBJECT_RE = re.compile(r"\{")
 
 
 def parse_classification_json(text: str, recipe: Recipe) -> Classification:
@@ -126,7 +142,10 @@ def parse_classification_json(text: str, recipe: Recipe) -> Classification:
                 confidence=0.0,
                 reason="no JSON object found in model response",
             )
-        data = json.loads(match.group(0))
+        # Decode exactly the first object. Some otherwise-useful vision models
+        # append a second JSON object or commentary despite the strict prompt;
+        # a greedy ``{.*}`` treated that recoverable output as invalid.
+        data, _ = json.JSONDecoder().raw_decode(cleaned[match.start():])
 
         moment_type = data.get("moment_type")
         if moment_type is not None:
@@ -143,11 +162,28 @@ def parse_classification_json(text: str, recipe: Recipe) -> Classification:
             confidence = 0.0
         confidence = max(0.0, min(1.0, confidence))
 
+        reason = str(data.get("reason", ""))[:500]
+        if recipe.domain.lower() == "basketball" and moment_type in {
+            "made_basket", "three_pointer"
+        }:
+            lowered = reason.lower()
+            hard_outcome = any(phrase in lowered for phrase in (
+                "through the rim", "through the hoop", "through the net",
+                "ball drops through", "net moves", "net movement",
+            ))
+            uncertain = any(word in lowered for word in (
+                "appears", "likely", "indicate", "trajectory",
+            ))
+            if not hard_outcome or uncertain:
+                moment_type = None
+                confidence = min(confidence, 0.25)
+                reason = "unconfirmed shot outcome: " + reason
+
         return Classification(
             moment_type=moment_type,
             subject_present=bool(data.get("subject_present", False)),
             confidence=confidence,
-            reason=str(data.get("reason", ""))[:500],
+            reason=reason,
         )
     except Exception as exc:  # never raise from a parser
         return Classification(

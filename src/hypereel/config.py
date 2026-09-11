@@ -29,6 +29,13 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
+def _get_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class Settings:
     """All runtime knobs. Construct via :func:`get_settings`."""
@@ -51,7 +58,14 @@ class Settings:
     fireworks_model: str = "accounts/fireworks/models/llama-v3p2-90b-vision-instruct"
 
     frames_per_candidate: int = 3
+    classification_context_seconds: float = 0.0
     motion_sample_fps: int = 2
+    max_provider_calls: int = 0
+    max_provider_spend_usd: float = 0.0
+    provider_call_reserve_usd: float = 0.25
+    provider_spend_ledger_path: str = ""
+    nebius_input_cost_per_million_usd: float = 10.0
+    nebius_output_cost_per_million_usd: float = 30.0
     download_dir: str = "downloads"
     output_dir: str = "output"
     memory_path: str = "hypereel_memory.json"
@@ -92,7 +106,20 @@ def get_settings() -> Settings:
             "accounts/fireworks/models/llama-v3p2-90b-vision-instruct",
         ),
         frames_per_candidate=_get_int("HYPEREEL_FRAMES_PER_CANDIDATE", 3),
+        classification_context_seconds=_get_float(
+            "HYPEREEL_CLASSIFICATION_CONTEXT_SECONDS", 0.0
+        ),
         motion_sample_fps=_get_int("HYPEREEL_MOTION_SAMPLE_FPS", 2),
+        max_provider_calls=_get_int("HYPEREEL_MAX_PROVIDER_CALLS", 0),
+        max_provider_spend_usd=_get_float("HYPEREEL_MAX_PROVIDER_SPEND_USD", 0.0),
+        provider_call_reserve_usd=_get_float("HYPEREEL_PROVIDER_CALL_RESERVE_USD", 0.25),
+        provider_spend_ledger_path=_get("HYPEREEL_PROVIDER_SPEND_LEDGER_PATH"),
+        nebius_input_cost_per_million_usd=_get_float(
+            "NEBIUS_INPUT_COST_PER_MILLION_USD", 10.0
+        ),
+        nebius_output_cost_per_million_usd=_get_float(
+            "NEBIUS_OUTPUT_COST_PER_MILLION_USD", 30.0
+        ),
         download_dir=_get("HYPEREEL_DOWNLOAD_DIR", "downloads"),
         output_dir=_get("HYPEREEL_OUTPUT_DIR", "output"),
         memory_path=_get("HYPEREEL_MEMORY_PATH", "hypereel_memory.json"),

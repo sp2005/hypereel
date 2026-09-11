@@ -56,6 +56,17 @@ def test_score_candidates_empty_input_returns_empty(basketball_recipe):
     assert score_candidates([], [], basketball_recipe) == []
 
 
+def test_score_candidates_never_emits_unclassified_motion(basketball_recipe):
+    recipe = basketball_recipe.model_copy(deep=True)
+    recipe.subject_selector.audience = "team"
+    recipe.selection.min_score = 0
+    window = CandidateWindow(start=5, end=10, signal_scores={"motion_intensity": 1})
+    classification = Classification(
+        moment_type=None, subject_present=False, confidence=1, reason="no event"
+    )
+    assert score_candidates([window], [classification], recipe) == []
+
+
 def test_select_clips_respects_time_budget(sample_candidates, basketball_recipe):
     classifications = _classify(sample_candidates, basketball_recipe)
     scored = score_candidates(sample_candidates, classifications, basketball_recipe)
