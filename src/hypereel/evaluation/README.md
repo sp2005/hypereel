@@ -107,3 +107,39 @@ To run the package-local integration tests:
 ```bash
 python -m pytest tests src/hypereel/evaluation/tests
 ```
+
+## Candidate recall and operational success rate (selection-v2)
+
+Both selection replay and pipeline evaluation report `candidate_recall`:
+
+```text
+annotated events with a timestamp inside at least one candidate / annotated events
+```
+
+Containment is `candidate.start <= event_time < candidate.end`. Predicted labels,
+classification confidence, subject filtering, and the final clip budget do not
+participate. Each annotated event counts once even when multiple windows cover it.
+No candidates with nonempty references gives 0; missing or empty references gives
+null/N/A. Non-exhaustive annotations give recall on the annotated subset only.
+Degraded pipeline cases suppress candidate recall, consistent with other
+reference-based metrics. Group reports show the macro average across successful,
+applicable cases, and each case's recall appears in the Markdown table.
+
+`operational_success_rate` is reported at the overall and synthetic/non-synthetic
+group levels:
+
+```text
+cases with status success / all attempted cases
+```
+
+Failed and degraded cases stay in the denominator. Successful cases count even if
+the selected reel is empty or labels are missing. Empty groups give null/N/A.
+The Markdown summary shows both rate and success/attempt counts. Dataset validation
+errors occur before case execution and are not attempted cases. This measures
+execution health under the runner's existing status detection, not AI correctness.
+No status detection or production pipeline behavior was changed.
+
+The report's metric version is now `selection-v2`. Existing metric formulas and
+schema remain unchanged; these two metrics are additive. JSON reports expose
+per-case `metrics.candidate_recall`, overall `operational_success_rate`, and
+`aggregates.<group>.operational_success_rate`.

@@ -9,7 +9,7 @@ from ..config import Settings
 from ..graph.build import build_graph
 from ..graph.state import new_state
 from ..observability import with_tracing
-from .metrics import selection_metrics
+from .metrics import candidate_recall, selection_metrics
 
 
 def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) -> dict:
@@ -57,6 +57,9 @@ def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) 
             clips, budget=budget, video_duration=duration,
             events=None if degraded else case.reference_events,
             exhaustive=case.exhaustive and not degraded,
+        )
+        metrics["candidate_recall"] = candidate_recall(
+            state.get("candidates", []), None if degraded else case.reference_events,
         )
         return {
             "status": "degraded" if degraded else "success", "degradation_reasons": degraded,

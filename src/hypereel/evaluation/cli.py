@@ -31,7 +31,7 @@ def main(argv=None) -> int:
         return 2
     print(f"Evaluated {report['case_count']} case(s); failed: {report['failed_count']}")
     if report.get("degraded_count"):
-        print(f"Degraded: {report['degraded_count']} (excluded from aggregate metrics)")
+        print(f"Degraded: {report['degraded_count']} (excluded from quality averages)")
     print(f"Report: {output / 'summary.md'}")
     return 1 if report["failed_count"] or report.get("degraded_count") else 0
 

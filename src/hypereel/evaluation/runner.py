@@ -9,7 +9,7 @@ from math import isfinite
 from ..recipe import load_recipe
 from ..select.selector import score_candidates, select_clips
 from .dataset import load_dataset
-from .metrics import selection_metrics
+from .metrics import candidate_recall, operational_success_rate, selection_metrics
 
 
 def run_selection(dataset_path: str | Path) -> dict:
@@ -56,6 +56,7 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
                 clips, budget=budget, video_duration=case.video_duration,
                 events=case.reference_events, exhaustive=case.exhaustive,
             )
+            metrics["candidate_recall"] = candidate_recall(case.candidates, case.reference_events)
             result.update(status="success", budget_seconds=budget, scored_count=len(scored),
                           metrics=metrics, matches=matches,
                           clips=[c.model_dump(mode="json") for c in clips])
@@ -76,11 +77,12 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
     except (OSError, subprocess.SubprocessError):
         revision, dirty = None, None
     return {
-        "schema_version": 1, "metric_version": "selection-v1", "mode": mode,
+        "schema_version": 1, "metric_version": "selection-v2", "mode": mode,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset_path": str(path), "dataset_sha256": sha256(path.read_bytes()).hexdigest(),
         "code_revision": revision, "working_tree_dirty": dirty,
         "case_count": len(results), "failed_count": sum(r["status"] == "failed" for r in results),
         "degraded_count": sum(r["status"] == "degraded" for r in results),
+        "operational_success_rate": operational_success_rate(results),
         "cases": results,
     }

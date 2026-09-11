@@ -1,6 +1,32 @@
 """Deterministic selection metrics. Undefined measurements are null, not zero."""
-from ..models import Clip
+from ..models import CandidateWindow, Clip
 from .schemas import ReferenceEvent
+
+
+def candidate_recall(
+    candidates: list[CandidateWindow], events: list[ReferenceEvent] | None,
+) -> float | None:
+    """Fraction of annotated events covered by any candidate, ignoring labels.
+
+    Each event counts once even with overlapping/duplicate candidates. Intervals
+    are start-inclusive/end-exclusive, as in event matching. Partial annotations
+    measure recall on the annotated subset only. No references means N/A.
+    """
+    if not events:
+        return None
+    covered = sum(any(w.start <= e.event_time < w.end for w in candidates) for e in events)
+    return covered / len(events)
+
+
+def operational_success_rate(cases: list[dict]) -> float | None:
+    """Successful cases / all attempted cases, including failed and degraded.
+
+    This measures execution health, not clip quality. Empty successful reels
+    count as successful executions. Dataset validation failures precede attempts.
+    """
+    if not cases:
+        return None
+    return sum(case["status"] == "success" for case in cases) / len(cases)
 
 
 def match_events(clips: list[Clip], events: list[ReferenceEvent]) -> list[tuple[int, int]]:
