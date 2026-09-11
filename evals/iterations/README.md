@@ -1,5 +1,7 @@
 # Nebius evaluation loop
 
+For the current executive summary, decision, spend, limitation, and next action, see [`../STATUS.md`](../STATUS.md).
+
 This directory is the durable audit trail for the development-only fix/evaluate/retest loop. The third game in `evals/holdout/` remains sealed until the development gates pass.
 
 ## Evaluation matrix
