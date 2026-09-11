@@ -64,6 +64,11 @@ def selection_metrics(clips: list[Clip], *, budget: float, video_duration: float
         union += max(0.0, clip.end - max(end, clip.start))
         end = max(end, clip.end)
     matches = match_events(clips, events) if events is not None else []
+    precision = (len(matches) / len(clips)
+                 if exhaustive and events is not None and clips else None)
+    recall = len(matches) / len(events) if events else None
+    f1 = (2 * precision * recall / (precision + recall)
+          if precision is not None and recall is not None and precision + recall else None)
     complete = sum(clips[i].start <= events[j].action_start
                    and clips[i].end >= events[j].action_end for i, j in matches)
     return {
@@ -75,8 +80,9 @@ def selection_metrics(clips: list[Clip], *, budget: float, video_duration: float
         "overlap_rate": max(0.0, duration - union) / duration if duration else None,
         "matched_event_count": len(matches) if events is not None else None,
         "reference_event_count": len(events) if events is not None else None,
-        "relevant_clip_precision": len(matches) / len(clips)
-            if exhaustive and events is not None and clips else None,
+        "relevant_clip_precision": precision,
+        "selected_event_recall": recall,
+        "selection_f1": f1,
         "action_completeness": complete / len(matches) if matches else None,
         "distinct_moment_types": len({c.moment_type for c in clips if c.moment_type}),
     }, [{"clip_index": i, "event_id": events[j].event_id} for i, j in matches]

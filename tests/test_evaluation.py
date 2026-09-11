@@ -40,6 +40,8 @@ def test_metrics_overlap_completeness_and_budget():
     assert metrics['budget_compliance'] is False
     assert metrics['overlap_rate'] == .25
     assert metrics['relevant_clip_precision'] == .5
+    assert metrics['selected_event_recall'] == 1
+    assert metrics['selection_f1'] == pytest.approx(2 / 3)
     assert metrics['action_completeness'] == 1
     assert len(matches) == 1
 
@@ -48,6 +50,7 @@ def test_missing_labels_and_zero_denominators_are_na():
     metrics, _ = selection_metrics([], budget=0, video_duration=20)
     assert metrics['budget_compliance'] is True
     for name in ('budget_utilization', 'overlap_rate', 'relevant_clip_precision',
+                 'selected_event_recall', 'selection_f1',
                  'action_completeness', 'matched_event_count'):
         assert metrics[name] is None
     metrics, _ = selection_metrics([Clip(start=0, end=10)], budget=10, video_duration=20,

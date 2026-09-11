@@ -1,0 +1,56 @@
+{
+  "dataset_id": "hypereel-external-gold",
+  "version": "1.0.0",
+  "split": "development",
+  "created_from": "externally labeled game events",
+  "taxonomy_recipe": "../../recipes/basketball_team_evaluation.yaml",
+  "event_count": 462,
+  "eligible_event_count": 100,
+  "negative_event_count": 362,
+  "event_ledger_sha256": "96a370438a7bc9d06ea1c8e76f7f00acb7e3c61c369d94fee6a12a3595a457a5",
+  "games": [
+    {
+      "game_id": "east-bay-elite-vs-spartans",
+      "lighting_slice": "baseline-gym",
+      "raw_event_count": 244,
+      "eligible_event_count": 51,
+      "source_event_counts": {
+        "2PT": 75,
+        "3PT": 2,
+        "AST": 7,
+        "BLK": 3,
+        "DR": 18,
+        "FT": 22,
+        "OR": 26,
+        "STL": 28,
+        "TOV": 63
+      },
+      "source_sha256": "da5583db353608008bcf55a425b21bcec5f6bb48240ca85cd710acba72e353cc",
+      "video_url": "https://www.youtube.com/watch?v=KBETdDRM70Q"
+    },
+    {
+      "game_id": "unlimited-vs-campus",
+      "lighting_slice": "alternate-lighting",
+      "raw_event_count": 218,
+      "eligible_event_count": 49,
+      "source_event_counts": {
+        "2PT": 52,
+        "3PT": 38,
+        "AST": 14,
+        "BLK": 2,
+        "DR": 29,
+        "FT": 17,
+        "OR": 17,
+        "STL": 17,
+        "TOV": 32
+      },
+      "source_sha256": "d2c6f5e63e4f6b094940313d71c6f40b1a94eb798e3211b733e04a94966ac571",
+      "video_url": "https://www.youtube.com/watch?v=rHSdABRoBeE"
+    }
+  ],
+  "limitations": [
+    "External point labels have not yet received independent human verification.",
+    "Action boundaries are provisional event_time -5s/+4s windows.",
+    "The third-game holdout is intentionally absent from this development dataset."
+  ]
+}

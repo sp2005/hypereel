@@ -1,0 +1,38 @@
+{
+  "dataset_id": "hypereel-external-final-holdout",
+  "version": "1.0.0",
+  "split": "final_holdout",
+  "development_use_permitted": false,
+  "created_from": "externally labeled game events",
+  "taxonomy_recipe": "../../recipes/basketball_team_evaluation.yaml",
+  "game_id": "east-bay-elite-13u-vs-ptown-wu",
+  "video_url": "https://www.youtube.com/watch?v=P9NHALkC4OE",
+  "event_count": 194,
+  "eligible_event_count": 35,
+  "negative_event_count": 159,
+  "eligible_label_counts": {
+    "block": 5,
+    "made_basket": 10,
+    "steal": 12,
+    "three_pointer": 8
+  },
+  "source_event_counts": {
+    "2PT": 50,
+    "3PT": 28,
+    "AST": 13,
+    "BLK": 5,
+    "DR": 26,
+    "FT": 10,
+    "OR": 19,
+    "STL": 12,
+    "TOV": 31
+  },
+  "source_sha256": "0671c2e2011e2e87769bc94a9e07d11023ff139836e4e356f17699197de13a90",
+  "event_ledger_sha256": "71738bfc0fb801cc89f264a62f7bc282dab7535d99e5fefe4df9a8e81cfdc0f7",
+  "pipeline_case_sha256": "9d96c84054723edf12802b718372ff14c7deba5aa946b2f0eaf17b7b75881d34",
+  "limitations": [
+    "External point labels have not yet received independent human verification.",
+    "Action boundaries are provisional event_time -5s/+4s windows.",
+    "This dataset must not be inspected or used during development or tuning."
+  ]
+}

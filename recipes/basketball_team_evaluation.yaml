@@ -1,0 +1,69 @@
+id: basketball_team_evaluation_v1
+name: "Basketball — Team Event Evaluation"
+domain: basketball
+highlight_model: event_based
+description: >
+  Evaluation-only recipe for measuring event detection across both teams in a
+  fully annotated game. It deliberately avoids player and scoreboard assumptions.
+
+moment_types:
+  - name: made_basket
+    description: The shooter makes a two-point field goal; exclude misses and free throws.
+    weight: 1.0
+    ideal_len: 9
+  - name: three_pointer
+    description: The shooter makes a field goal from behind the three-point line; exclude misses.
+    weight: 1.1
+    ideal_len: 9
+  - name: block
+    description: A defender visibly blocks or deflects an opponent's shot attempt.
+    weight: 0.9
+    ideal_len: 8
+  - name: steal
+    description: A defender takes or deflects the ball and causes a clear change of possession.
+    weight: 0.9
+    ideal_len: 8
+
+signals:
+  - type: audio_peak
+    role: proposer
+    weight: 0.35
+  - type: motion_intensity
+    role: proposer
+    weight: 0.30
+    params:
+      window_seconds: 6
+  - type: vision_classify
+    role: scorer
+    weight: 0.35
+
+subject_selector:
+  type: none
+  audience: team
+
+selection:
+  max_duration: 600
+  min_clip: 5
+  max_clip: 12
+  lead_in: 5
+  lead_out: 4
+  min_score: 0.45
+  ordering: chronological
+  coverage: "spread across the complete game"
+  dedup_overlap: true
+
+style:
+  transitions: hard_cut
+  audio: keep_original
+  overlays: []
+  format: "16:9"
+  platform: local
+
+guardrails:
+  never_include: [missed_shots, free_throws, timeouts, bench_sequences]
+  grounding: "require visible evidence of the event outcome"
+
+acceptance:
+  - "selected clips match annotated made baskets, steals, or blocks"
+  - "misses and unrelated events are excluded"
+  - "clips include the action around the annotated event timestamp"
