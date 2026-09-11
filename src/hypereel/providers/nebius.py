@@ -20,6 +20,7 @@ from ..models import Classification, Recipe
 from .base import LLMProvider, VisionProvider
 from ._util import (
     build_classification_prompt,
+    build_verification_prompt,
     encode_frames_b64,
     frame_to_data_uri,
     parse_classification_json,
@@ -51,7 +52,16 @@ class OpenAICompatVisionProvider(VisionProvider):
         try:
             prompt = build_classification_prompt(recipe)
             content: list[dict] = [{"type": "text", "text": prompt}]
-            for raw in encode_frames_b64(frame_paths):
+            encoded_frames = encode_frames_b64(frame_paths)
+            for index, raw in enumerate(encoded_frames):
+                if len(encoded_frames) >= 5 and index == 0:
+                    label = "BEFORE CONTEXT (do not classify an event visible only here)"
+                elif len(encoded_frames) >= 5 and index == len(encoded_frames) - 1:
+                    label = "AFTER CONTEXT (do not classify an event visible only here)"
+                else:
+                    candidate_index = index if len(encoded_frames) >= 5 else index + 1
+                    label = f"CANDIDATE ACTION FRAME {candidate_index}"
+                content.append({"type": "text", "text": label})
                 content.append(
                     {"type": "image_url", "image_url": {"url": frame_to_data_uri(raw)}}
                 )
@@ -62,6 +72,7 @@ class OpenAICompatVisionProvider(VisionProvider):
             completion = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": content}],
+                temperature=0,
             )
             record_provider_usage(completion)
             text = completion.choices[0].message.content or ""
@@ -73,6 +84,44 @@ class OpenAICompatVisionProvider(VisionProvider):
                 subject_present=False,
                 confidence=0.0,
                 reason=f"{self.name} error: {exc}",
+            )
+
+    def verify_window(
+        self,
+        frame_paths: Sequence[str],
+        recipe: Recipe,
+        proposed: Classification,
+        window_index: int = 0,
+    ) -> Classification:
+        """Verify a positive verdict against event-specific lookalikes."""
+        if proposed.moment_type is None:
+            return proposed
+        try:
+            content: list[dict] = [
+                {"type": "text", "text": build_verification_prompt(recipe, proposed)}
+            ]
+            for index, raw in enumerate(encode_frames_b64(frame_paths), start=1):
+                content.append({"type": "text", "text": f"CANDIDATE ACTION FRAME {index}"})
+                content.append(
+                    {"type": "image_url", "image_url": {"url": frame_to_data_uri(raw)}}
+                )
+            authorize_provider_call(
+                provider=self.name, model=self._model, operation="vision_verification"
+            )
+            completion = self._client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": content}],
+                temperature=0,
+            )
+            record_provider_usage(completion)
+            return parse_classification_json(completion.choices[0].message.content or "", recipe)
+        except Exception as exc:
+            record_provider_failure(exc)
+            return Classification(
+                moment_type=None,
+                subject_present=False,
+                confidence=0.0,
+                reason=f"{self.name} verification error: {exc}",
             )
 
 
@@ -99,6 +148,7 @@ class OpenAICompatLLMProvider(LLMProvider):
                 model=self._model,
                 messages=messages,
                 max_tokens=max_tokens,
+                temperature=0,
             )
             record_provider_usage(completion)
             return completion.choices[0].message.content or ""

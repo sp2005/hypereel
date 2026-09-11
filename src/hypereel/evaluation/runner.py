@@ -78,7 +78,7 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
     except (OSError, subprocess.SubprocessError):
         revision, dirty = None, None
     return {
-        "schema_version": 1, "metric_version": "selection-v5", "mode": mode,
+        "schema_version": 1, "metric_version": "selection-v6", "mode": mode,
         "evaluation_run_id": str(uuid4()),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset_path": str(path), "dataset_sha256": sha256(path.read_bytes()).hexdigest(),

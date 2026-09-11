@@ -9,7 +9,10 @@ from ..config import Settings
 from ..graph.build import build_graph
 from ..graph.state import new_state
 from ..observability import provider_budget_scope, with_tracing
-from .metrics import candidate_recall, pipeline_diagnostic_metrics, selection_metrics
+from .metrics import (
+    candidate_recall, candidate_recall_at_iou, pipeline_diagnostic_metrics,
+    selection_metrics,
+)
 
 
 def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) -> dict:
@@ -31,7 +34,11 @@ def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) 
                             max_candidates=case.max_candidates,
                             candidate_sampling=case.candidate_sampling,
                             evaluation_start_seconds=case.evaluation_start_seconds,
-                            evaluation_end_seconds=case.evaluation_end_seconds)
+                            evaluation_end_seconds=case.evaluation_end_seconds,
+                            evaluation_reference_events=[
+                                event.model_dump(mode="json")
+                                for event in case.reference_events or []
+                            ])
         with provider_budget_scope(isolated) as provider_budget:
             graph.invoke(initial, config)
         snapshot = graph.get_state(config)
@@ -66,6 +73,14 @@ def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) 
         metrics["candidate_recall"] = candidate_recall(
             uncapped_candidates, None if degraded else case.reference_events,
         )
+        for threshold in (0.1, 0.3, 0.5):
+            metrics[f"candidate_recall_at_iou_{str(threshold).replace('.', '_')}"] = (
+                candidate_recall_at_iou(
+                    uncapped_candidates,
+                    None if degraded else case.reference_events,
+                    threshold,
+                )
+            )
         candidates = state.get("candidates", [])
         horizon_start = case.evaluation_start_seconds or 0.0
         horizon_end = (case.evaluation_end_seconds

@@ -33,6 +33,8 @@ signals:
     weight: 0.30
     params:
       window_seconds: 6
+      candidate_lead_in: 3
+      candidate_lead_out: 3
   - type: vision_classify
     role: scorer
     weight: 0.35
@@ -51,6 +53,7 @@ selection:
   ordering: chronological
   coverage: "spread across the complete game"
   dedup_overlap: true
+  min_gap_seconds: 2
 
 style:
   transitions: hard_cut

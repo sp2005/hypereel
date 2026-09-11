@@ -75,7 +75,9 @@ class PipelineCase(BaseModel):
     audience: Literal["individual", "team"] | None = None
     subject_description: str | None = None
     max_candidates: int | None = Field(default=None, gt=0)
-    candidate_sampling: Literal["chronological", "spread"] = "chronological"
+    candidate_sampling: Literal[
+        "chronological", "spread", "reference_stratified"
+    ] = "chronological"
     evaluation_start_seconds: float | None = Field(default=None, ge=0)
     evaluation_end_seconds: float | None = Field(default=None, gt=0)
     reference_events: list[ReferenceEvent] | None = None

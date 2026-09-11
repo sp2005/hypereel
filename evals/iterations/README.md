@@ -17,8 +17,9 @@ This directory is the durable audit trail for the development-only fix/evaluate/
 
 ## Development gates
 
-- Candidate recall: at least 0.80.
+- Candidate recall at IoU 0.30: at least 0.80.
 - Selected-event precision, recall, and F1: each at least 0.70.
+- Selected-event recall at IoU 0.30: at least 0.70.
 - Classification schema pass rate: 1.00.
 - Invalid boundary count: 0; selected overlap rate: 0.
 - Total estimated provider spend across the loop: no more than USD 5.00.

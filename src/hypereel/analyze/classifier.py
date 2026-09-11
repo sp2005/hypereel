@@ -82,15 +82,53 @@ def classify_candidates(
     for i, window in enumerate(candidates):
         try:
             context = max(0.0, settings.classification_context_seconds)
-            frame_window = CandidateWindow(
-                start=max(0.0, window.start - context),
-                end=window.end + context,
-                signal_scores=window.signal_scores,
-            )
-            frame_paths = extract_frames(
-                video_path, frame_window, settings.frames_per_candidate, frames_dir
-            )
+            if context > 0 and settings.frames_per_candidate >= 5:
+                frame_paths = []
+                if window.start > 0:
+                    before = CandidateWindow(
+                        start=max(0.0, window.start - context), end=window.start,
+                        signal_scores=window.signal_scores,
+                    )
+                    frame_paths += extract_frames(video_path, before, 1, frames_dir)
+                core_paths = extract_frames(
+                    video_path, window, settings.frames_per_candidate - 2, frames_dir
+                )
+                frame_paths += core_paths
+                after = CandidateWindow(
+                    start=window.end, end=window.end + context,
+                    signal_scores=window.signal_scores,
+                )
+                frame_paths += extract_frames(video_path, after, 1, frames_dir)
+            else:
+                frame_paths = extract_frames(
+                    video_path, window, settings.frames_per_candidate, frames_dir
+                )
+                core_paths = frame_paths
             classification = provider.classify_window(frame_paths, recipe, window_index=i)
+            if settings.verify_with_core_frames:
+                verify = getattr(provider, "verify_window", None)
+                verification = (
+                    verify(core_paths, recipe, classification, window_index=i)
+                    if callable(verify) and classification.moment_type is not None
+                    else provider.classify_window(core_paths, recipe, window_index=i)
+                )
+                if verification.moment_type != classification.moment_type:
+                    classification = Classification(
+                        moment_type=None,
+                        subject_present=(classification.subject_present
+                                         and verification.subject_present),
+                        confidence=min(classification.confidence, verification.confidence, 0.25),
+                        reason=("context/core disagreement: context="
+                                f"{classification.moment_type}, core={verification.moment_type}"),
+                    )
+                else:
+                    classification = Classification(
+                        moment_type=classification.moment_type,
+                        subject_present=(classification.subject_present
+                                         and verification.subject_present),
+                        confidence=min(classification.confidence, verification.confidence),
+                        reason=classification.reason,
+                    )
         except Exception:
             classification = Classification(confidence=0.0, reason="classification error")
         results.append(classification)

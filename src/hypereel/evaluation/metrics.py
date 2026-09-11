@@ -43,6 +43,18 @@ def candidate_recall(
     return covered / len(events)
 
 
+def candidate_recall_at_iou(
+    candidates: list[CandidateWindow], events: list[ReferenceEvent] | None, threshold: float,
+) -> float | None:
+    if not events:
+        return None
+    edges = [[j for j, event in enumerate(events)
+              if interval_iou(window.start, window.end,
+                              event.action_start, event.action_end) >= threshold]
+             for window in candidates]
+    return len(_maximum_matching(edges)) / len(events)
+
+
 def operational_success_rate(cases: list[dict]) -> float | None:
     """Successful cases / all attempted cases, including failed and degraded.
 
@@ -82,7 +94,8 @@ def pipeline_diagnostic_metrics(
     rows = []
     for window, classification in zip(candidates, classifications):
         labels = {event.moment_type for event in events
-                  if window.start < event.action_end and event.action_start < window.end}
+                  if interval_iou(window.start, window.end,
+                                  event.action_start, event.action_end) >= 0.1}
         predicted = classification.moment_type
         actual_positive = bool(labels)
         predicted_positive = predicted is not None
@@ -108,7 +121,8 @@ def pipeline_diagnostic_metrics(
     ) if rows else None
 
     detected_events = sum(any(
-        window.start < event.action_end and event.action_start < window.end
+        interval_iou(window.start, window.end,
+                     event.action_start, event.action_end) >= 0.1
         and classification.moment_type == event.moment_type
         for window, classification in zip(candidates, classifications)
     ) for event in events)
@@ -142,16 +156,19 @@ def pipeline_diagnostic_metrics(
     }
 
 
-def match_events(clips: list[Clip], events: list[ReferenceEvent]) -> list[tuple[int, int]]:
-    """Maximum-cardinality, one-to-one matching by label and action overlap.
+def match_events(
+    clips: list[Clip], events: list[ReferenceEvent], *, min_iou: float = 0.1,
+) -> list[tuple[int, int]]:
+    """Maximum-cardinality one-to-one match by label and minimum action IoU.
 
-    Stable input order breaks ties. Any positive overlap with the externally
-    supplied action interval is eligible; temporal errors are reported separately.
+    Stable input order breaks ties. Tiny edge contacts do not receive credit;
+    stricter IoU recalls are reported separately.
     """
     edges = [[j for j, event in enumerate(events)
               if clip.moment_type == event.moment_type
-              and clip.start < event.action_end
-              and event.action_start < clip.end] for clip in clips]
+              and interval_iou(clip.start, clip.end,
+                               event.action_start, event.action_end) >= min_iou]
+             for clip in clips]
     return _maximum_matching(edges)
 
 

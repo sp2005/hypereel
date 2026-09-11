@@ -59,6 +59,7 @@ class Settings:
 
     frames_per_candidate: int = 3
     classification_context_seconds: float = 0.0
+    verify_with_core_frames: bool = False
     motion_sample_fps: int = 2
     max_provider_calls: int = 0
     max_provider_spend_usd: float = 0.0
@@ -109,6 +110,9 @@ def get_settings() -> Settings:
         classification_context_seconds=_get_float(
             "HYPEREEL_CLASSIFICATION_CONTEXT_SECONDS", 0.0
         ),
+        verify_with_core_frames=_get(
+            "HYPEREEL_VERIFY_WITH_CORE_FRAMES", "false"
+        ).lower() in {"true", "1", "yes"},
         motion_sample_fps=_get_int("HYPEREEL_MOTION_SAMPLE_FPS", 2),
         max_provider_calls=_get_int("HYPEREEL_MAX_PROVIDER_CALLS", 0),
         max_provider_spend_usd=_get_float("HYPEREEL_MAX_PROVIDER_SPEND_USD", 0.0),

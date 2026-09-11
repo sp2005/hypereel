@@ -58,7 +58,7 @@ def test_selection_recall_is_before_filtering_and_accepts_partial_annotations(tm
     assert report['cases'][0]['metrics']['candidate_recall'] == 1
     assert report['cases'][0]['metrics']['relevant_clip_precision'] is None
     assert report['operational_success_rate'] == 1
-    assert report['metric_version'] == 'selection-v5'
+    assert report['metric_version'] == 'selection-v6'
 
 
 def test_pipeline_recall_and_degraded_suppression(tmp_path):

@@ -119,6 +119,30 @@ def test_select_clips_dedup_overlap_drops_overlapping_clip(basketball_recipe):
     assert 4.0 not in starts, "overlapping lower-scored clip should be deduped out"
 
 
+def test_select_clips_respects_min_gap_between_fragments(basketball_recipe):
+    basketball_recipe.selection.dedup_overlap = True
+    basketball_recipe.selection.min_gap_seconds = 2.0
+    high = _clip(0.0, 10.0, 0.90)
+    nearby = _clip(11.0, 20.0, 0.80)
+    separate = _clip(22.0, 30.0, 0.70)
+
+    selected = select_clips([nearby, separate, high], basketball_recipe, max_duration=1000.0)
+
+    assert [(clip.start, clip.end) for clip in selected] == [(0.0, 10.0), (22.0, 30.0)]
+
+
+def test_select_clips_centers_consolidated_same_event_fragments(basketball_recipe):
+    recipe = basketball_recipe.model_copy(deep=True)
+    recipe.selection.dedup_overlap = True
+    recipe.selection.max_clip = 12
+    early = Clip(start=160, end=172, moment_type="steal", score=.9)
+    late = Clip(start=168, end=180, moment_type="steal", score=.8)
+    selected = select_clips([early, late], recipe, max_duration=30)
+    assert len(selected) == 1
+    assert selected[0].start == 164
+    assert selected[0].end == 176
+
+
 def test_select_clips_best_first_ordering_is_score_descending(basketball_recipe):
     recipe = basketball_recipe.model_copy(deep=True)
     recipe.selection.ordering = "best_first"
@@ -183,6 +207,13 @@ def test_shape_window_no_clamp_without_video_duration():
     # No duration known -> no clamp, existing behavior preserved.
     _, end = _shape_window(window, sel, video_duration=None)
     assert end > 120.0
+
+
+def test_shape_window_centers_when_padded_evidence_exceeds_max_clip():
+    window = CandidateWindow(start=100, end=114)
+    sel = SelectionPolicy(min_clip=5, max_clip=10, lead_in=5, lead_out=5)
+    start, end = _shape_window(window, sel, video_duration=200)
+    assert (start, end) == (102, 112)
 
 
 # --------------------------------------------------------------------------- #

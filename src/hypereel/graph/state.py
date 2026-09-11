@@ -39,6 +39,7 @@ class ReelState(TypedDict, total=False):
     candidate_sampling: str
     evaluation_start_seconds: Optional[float]
     evaluation_end_seconds: Optional[float]
+    evaluation_reference_events: list[dict[str, Any]]
 
     # ---- ingest ----
     video_path: Optional[str]
@@ -108,6 +109,7 @@ def new_state(source: str, recipe: Recipe, **overrides: Any) -> ReelState:
         "candidate_sampling": overrides.get("candidate_sampling", "chronological"),
         "evaluation_start_seconds": overrides.get("evaluation_start_seconds"),
         "evaluation_end_seconds": overrides.get("evaluation_end_seconds"),
+        "evaluation_reference_events": overrides.get("evaluation_reference_events", []),
         "video_path": None,
         "video_duration": 0.0,
         "has_commentary": False,

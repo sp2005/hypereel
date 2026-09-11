@@ -28,6 +28,8 @@ def motion_windows(
 
     params = params or {}
     threshold = float(params.get("threshold", 0.5))
+    lead_in = max(0.0, float(params.get("candidate_lead_in", 0.0)))
+    lead_out = max(0.0, float(params.get("candidate_lead_out", 0.0)))
     sample_fps = max(1, int(getattr(settings, "motion_sample_fps", 2)))
 
     try:
@@ -77,8 +79,8 @@ def motion_windows(
                 end_t = max(t, start_t + 1.0)
                 windows.append(
                     CandidateWindow(
-                        start=start_t,
-                        end=min(end_t, duration),
+                        start=max(0.0, start_t - lead_in),
+                        end=min(end_t + lead_out, duration),
                         signal_scores={"motion_intensity": peak},
                     )
                 )
@@ -86,8 +88,8 @@ def motion_windows(
         if in_motion:
             windows.append(
                 CandidateWindow(
-                    start=start_t,
-                    end=min(start_t + 5.0, duration),
+                    start=max(0.0, start_t - lead_in),
+                    end=min(start_t + 5.0 + lead_out, duration),
                     signal_scores={"motion_intensity": peak},
                 )
             )

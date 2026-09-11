@@ -75,10 +75,18 @@ def build_classification_prompt(recipe: Recipe) -> str:
     if recipe.domain.lower() == "basketball":
         temporal_guidance = (
             "\nBasketball temporal checks:\n"
+            "- The first and last images provide before/after context. The middle "
+            "images densely sample the candidate action. Classify the central action; "
+            "do not label an unrelated event visible only in the outer context.\n"
             "- Treat the images as an ordered sequence, not independent pictures. "
             "Compare who controls the ball in the first and last frames.\n"
             "- A steal requires visible evidence that the defending team gains or "
             "deflects possession; a rebound after a shot is not a steal.\n"
+            "- Explicit negative alternatives: an offensive rebound, defensive rebound, "
+            "missed shot, pass out of bounds, or unforced turnover is not a highlight "
+            "type in this rubric. Return moment_type=null for those actions.\n"
+            "- Do not call a rebound a steal merely because possession changes teams. "
+            "A steal requires a defender disrupting a live dribble or pass before control.\n"
             "- A made basket requires visible outcome evidence (ball through the rim/net "
             "or unmistakable immediate aftermath). A ball in the air is only an attempt.\n"
             "- A three_pointer additionally requires clear evidence that the shooter was "
@@ -101,6 +109,37 @@ def build_classification_prompt(recipe: Recipe) -> str:
         "exactly this shape:\n"
         '{"moment_type": <string or null>, "subject_present": <true|false>, '
         '"confidence": <number 0..1>, "reason": <short string>}'
+    )
+
+
+def build_verification_prompt(recipe: Recipe, proposed: Classification) -> str:
+    """Build a deliberately contrastive second-pass prompt for a proposed event."""
+    label = proposed.moment_type
+    alternatives = {
+        "steal": (
+            "Reject it if the sequence is a rebound after a shot, a loose-ball recovery, "
+            "an unforced turnover, or merely shows possession changing between frames. "
+            "Accept only when a defender visibly disrupts a live dribble or pass and gains possession."
+        ),
+        "made_basket": (
+            "Reject it if this is only a shot attempt, a miss, a rebound, or the ball's outcome is hidden. "
+            "Accept only with visible ball-through-rim/net evidence or unmistakable immediate aftermath."
+        ),
+        "three_pointer": (
+            "Reject it unless both the made outcome and the shooter's position behind the three-point line "
+            "are visually established."
+        ),
+    }.get(label, "Reject it unless the ordered frames directly establish the proposed event.")
+    valid_names = ", ".join(m.name for m in recipe.moment_types)
+    return (
+        "Act as a strict verification pass for ordered candidate-action frames from a basketball video.\n"
+        f"The first pass proposed: {label!r}. Allowed labels are: {valid_names}.\n"
+        f"{alternatives}\n"
+        "Do not infer from a scoreboard, player reaction, or possession change alone. If the visual evidence "
+        "does not prove the proposal, return moment_type=null. Do not substitute a different event label.\n"
+        "Respond with STRICT JSON only in this shape:\n"
+        '{"moment_type": <the proposed string or null>, "subject_present": <true|false>, '
+        '"confidence": <number 0..1>, "reason": <short evidence-based string>}'
     )
 
 

@@ -90,6 +90,7 @@ class SelectionPolicy(BaseModel):
     ordering: Ordering = "chronological"
     coverage: Optional[str] = None      # NL hint, e.g. "spread across 4 quarters"
     dedup_overlap: bool = True
+    min_gap_seconds: float = 0.0       # suppress near-adjacent reel fragments
 
 
 class StyleConfig(BaseModel):

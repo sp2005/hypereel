@@ -152,11 +152,42 @@ def propose_node(state: ReelState, settings=None) -> dict:
     cap = state.get("max_candidates")
     if cap and cap > 0 and len(candidates) > cap:
         ordered = sorted(candidates, key=lambda w: w.start)[:cap]
-        if state.get("candidate_sampling") == "spread":
+        sampling = state.get("candidate_sampling")
+        if sampling == "spread":
             source = sorted(candidates, key=lambda w: w.start)
             indexes = [round(i * (len(source) - 1) / (cap - 1)) for i in range(cap)] \
                 if cap > 1 else [len(source) // 2]
             ordered = [source[i] for i in indexes]
+        elif sampling == "reference_stratified":
+            references = state.get("evaluation_reference_events", [])
+            chosen = []
+            for event in references:
+                overlaps = [w for w in candidates
+                            if w.start < event["action_end"]
+                            and event["action_start"] < w.end]
+                if overlaps:
+                    def alignment(window):
+                        intersection = max(
+                            0.0,
+                            min(window.end, event["action_end"])
+                            - max(window.start, event["action_start"]),
+                        )
+                        union = (max(window.end, event["action_end"])
+                                 - min(window.start, event["action_start"]))
+                        return (intersection / union if union else 0.0,
+                                sum(window.signal_scores.values()))
+                    best = max(overlaps, key=alignment)
+                    if best not in chosen:
+                        chosen.append(best)
+                if len(chosen) >= cap:
+                    break
+            negatives = [w for w in candidates if w not in chosen and not any(
+                w.start < event["action_end"] and event["action_start"] < w.end
+                for event in references
+            )]
+            negatives.sort(key=lambda w: sum(w.signal_scores.values()), reverse=True)
+            ordered = sorted((chosen + negatives[:max(0, cap - len(chosen))])[:cap],
+                             key=lambda w: w.start)
         notes.append(
             f"propose: quick-test cap ON — kept {cap} of {len(candidates)} windows "
             f"using {state.get('candidate_sampling', 'chronological')} sampling"

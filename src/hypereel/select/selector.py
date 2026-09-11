@@ -157,6 +157,8 @@ def _shape_window(
     if length < selection.min_clip:
         end = start + selection.min_clip
     elif length > selection.max_clip:
+        midpoint = (window.start + window.end) / 2
+        start = max(0.0, midpoint - selection.max_clip / 2)
         end = start + selection.max_clip
 
     if video_duration is not None and video_duration > 0 and end > video_duration:
@@ -235,6 +237,43 @@ def _overlaps(clip: Clip, others: list[Clip]) -> bool:
     return any(clip.start < o.end and o.start < clip.end for o in others)
 
 
+def _too_close(clip: Clip, others: list[Clip], gap: float) -> bool:
+    """Whether ``clip`` overlaps or sits closer than the configured reel gap."""
+    return any(clip.start < o.end + gap and o.start < clip.end + gap for o in others)
+
+
+def _consolidate_same_type(scored: list[Clip], max_clip: float) -> list[Clip]:
+    """Merge overlapping fragments of the same event without early-time bias."""
+    groups: list[list[Clip]] = []
+    for clip in sorted(scored, key=lambda item: item.start):
+        if (groups and groups[-1][-1].moment_type == clip.moment_type
+                and clip.start < max(item.end for item in groups[-1])):
+            groups[-1].append(clip)
+        else:
+            groups.append([clip])
+    consolidated = []
+    for group in groups:
+        if len(group) == 1:
+            consolidated.append(group[0])
+            continue
+        start = min(item.start for item in group)
+        end = max(item.end for item in group)
+        if end - start > max_clip:
+            midpoint = (start + end) / 2
+            start = max(0.0, midpoint - max_clip / 2)
+            end = start + max_clip
+        strongest = max(group, key=lambda item: item.score)
+        consolidated.append(Clip(
+            start=start,
+            end=end,
+            moment_type=strongest.moment_type,
+            score=strongest.score,
+            reason=strongest.reason,
+            subject_present=any(item.subject_present for item in group),
+        ))
+    return consolidated
+
+
 def select_clips(
     scored: list[Clip],
     recipe: Recipe,
@@ -259,13 +298,17 @@ def select_clips(
 
     selection = recipe.selection
     budget = selection.max_duration if max_duration is None else max_duration
+    if selection.dedup_overlap:
+        scored = _consolidate_same_type(scored, selection.max_clip)
 
     picked: list[Clip] = []
     used = 0.0
     for clip in sorted(scored, key=lambda c: c.score, reverse=True):
         if used + clip.duration > budget:
             continue
-        if selection.dedup_overlap and _overlaps(clip, picked):
+        if selection.dedup_overlap and _too_close(
+            clip, picked, max(0.0, selection.min_gap_seconds)
+        ):
             continue
         picked.append(clip)
         used += clip.duration
