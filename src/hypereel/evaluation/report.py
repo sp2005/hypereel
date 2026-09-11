@@ -83,3 +83,32 @@ def write_report(report: dict, output_dir: str | Path) -> Path:
                      f"{_cell(case.get('error') or '; '.join(case.get('degradation_reasons', [])))} |")
     (output / "summary.md").write_text("\n".join(lines) + "\n")
     return output
+
+
+def append_iteration_history(report: dict, history_path: str | Path, change_note: str) -> Path:
+    """Append a compact, machine-readable run record; never rewrite history."""
+    path = Path(history_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "evaluation_run_id": report["evaluation_run_id"],
+        "created_at": report["created_at"],
+        "mode": report["mode"],
+        "change_note": change_note,
+        "dataset_sha256": report["dataset_sha256"],
+        "code_revision": report["code_revision"],
+        "working_tree_dirty": report["working_tree_dirty"],
+        "metric_version": report["metric_version"],
+        "cases": [{
+            "case_id": case["case_id"],
+            "status": case["status"],
+            "metrics": case["metrics"],
+            "provider_attempted_calls": case.get("provider_attempted_calls"),
+            "estimated_provider_spend_usd": case.get("estimated_provider_spend_usd"),
+            "estimated_provider_cumulative_spend_usd": case.get(
+                "estimated_provider_cumulative_spend_usd"
+            ),
+        } for case in report["cases"]],
+    }
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, allow_nan=False) + "\n")
+    return path

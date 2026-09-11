@@ -7,8 +7,11 @@ import pytest
 from hypereel.models import Clip
 from hypereel.evaluation.cli import main
 from hypereel.evaluation.dataset import load_dataset
-from hypereel.evaluation.metrics import match_events, selection_metrics
-from hypereel.evaluation.report import aggregate
+from hypereel.evaluation.metrics import (
+    match_events, pipeline_diagnostic_metrics, selection_metrics,
+)
+from hypereel.models import CandidateWindow, Classification
+from hypereel.evaluation.report import aggregate, append_iteration_history
 from hypereel.evaluation.runner import run_selection
 from hypereel.evaluation.schemas import ReferenceEvent
 from hypereel.recipe import load_recipe
@@ -44,6 +47,39 @@ def test_metrics_overlap_completeness_and_budget():
     assert metrics['selection_f1'] == pytest.approx(2 / 3)
     assert metrics['action_completeness'] == 1
     assert len(matches) == 1
+
+
+def test_extended_detection_temporal_and_confusion_metrics():
+    refs = [event('correct', 5), event('missed', 15)]
+    clips = [Clip(start=4, end=6, moment_type='made_basket'),
+             Clip(start=14, end=16, moment_type='block'),
+             Clip(start=18, end=20, moment_type='made_basket')]
+    metrics, _ = selection_metrics(
+        clips, budget=30, video_duration=60, events=refs, exhaustive=True,
+    )
+    assert metrics['micro_f1'] == pytest.approx(0.4)
+    assert metrics['false_positives_per_video_minute'] == 2
+    assert metrics['mean_temporal_iou'] == 1
+    assert metrics['event_recall_at_iou_0_5'] == .5
+    assert metrics['confusion_matrix']['made_basket']['block'] == 1
+    assert metrics['confusion_matrix']['__none__']['made_basket'] == 1
+
+
+def test_pipeline_diagnostics_measure_negatives_calibration_and_funnel():
+    refs = [event('event', 5)]
+    candidates = [CandidateWindow(start=4, end=6), CandidateWindow(start=20, end=22)]
+    classifications = [
+        Classification(moment_type='made_basket', confidence=.9),
+        Classification(moment_type=None, confidence=.8),
+    ]
+    metrics = pipeline_diagnostic_metrics(
+        candidates, classifications, refs, exhaustive=True, selected_match_count=1,
+    )
+    assert metrics['candidate_classification_accuracy'] == 1
+    assert metrics['negative_window_specificity'] == 1
+    assert metrics['classification_event_recall'] == 1
+    assert metrics['selection_survival_rate'] == 1
+    assert metrics['candidate_event_average_precision'] == 1
 
 
 def test_missing_labels_and_zero_denominators_are_na():
@@ -148,3 +184,13 @@ def test_aggregate_excludes_na_and_separates_groups():
     result = aggregate(cases)
     assert result['synthetic']['metrics']['precision'] == {'macro_mean': .5, 'applicable_cases': 1}
     assert result['non_synthetic']['metrics']['precision']['macro_mean'] == 1
+
+
+def test_iteration_history_is_append_only(tmp_path):
+    history = tmp_path / 'history.jsonl'
+    report = run_selection(SMOKE)
+    append_iteration_history(report, history, 'baseline')
+    append_iteration_history(report, history, 'repeatability check')
+    rows = [json.loads(line) for line in history.read_text().splitlines()]
+    assert [row['change_note'] for row in rows] == ['baseline', 'repeatability check']
+    assert all(row['dataset_sha256'] == report['dataset_sha256'] for row in rows)

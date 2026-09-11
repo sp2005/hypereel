@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .runner import run_selection, run_pipeline_evaluation
-from .report import write_report
+from .report import append_iteration_history, write_report
 
 
 def main(argv=None) -> int:
@@ -16,8 +16,13 @@ def main(argv=None) -> int:
     run.add_argument("--mode", choices=["selection", "pipeline"], default="selection")
     run.add_argument("--dataset", type=Path, required=True)
     run.add_argument("--output", type=Path, help="new or empty report directory")
+    run.add_argument("--history", type=Path, default=Path("evals/iterations/history.jsonl"),
+                     help="append-only machine-readable history for pipeline runs")
+    run.add_argument("--change-note", default="", help="what changed since the prior run")
     args = parser.parse_args(argv)
     try:
+        if args.mode == "pipeline" and not args.change_note.strip():
+            raise ValueError("pipeline runs require --change-note for the cumulative history")
         output = args.output or Path("evals/results") / (
             datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
         )
@@ -26,6 +31,8 @@ def main(argv=None) -> int:
         runner = run_pipeline_evaluation if args.mode == "pipeline" else run_selection
         report = runner(args.dataset)
         write_report(report, output)
+        if args.mode == "pipeline":
+            append_iteration_history(report, args.history, args.change_note.strip())
     except (ValueError, OSError) as exc:
         print(f"evaluation error: {exc}", file=sys.stderr)
         return 2

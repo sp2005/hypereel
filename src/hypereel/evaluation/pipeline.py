@@ -9,7 +9,7 @@ from ..config import Settings
 from ..graph.build import build_graph
 from ..graph.state import new_state
 from ..observability import provider_budget_scope, with_tracing
-from .metrics import candidate_recall, selection_metrics
+from .metrics import candidate_recall, pipeline_diagnostic_metrics, selection_metrics
 
 
 def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) -> dict:
@@ -71,12 +71,15 @@ def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) 
         horizon_end = (case.evaluation_end_seconds
                        if case.evaluation_end_seconds is not None
                        else max((candidate.end for candidate in candidates), default=0.0))
+        diagnostic_events = None if degraded else case.reference_events
         if case.max_candidates and not degraded:
             slice_events = [event for event in case.reference_events or []
                             if horizon_start <= event.event_time < horizon_end]
+            diagnostic_events = slice_events
             slice_metrics, _ = selection_metrics(
                 clips, budget=budget, video_duration=duration,
                 events=slice_events, exhaustive=case.exhaustive,
+                observed_duration_seconds=horizon_end - horizon_start,
             )
             metrics.update({f"processed_slice_{key}": value for key, value in
                             slice_metrics.items()})
@@ -92,6 +95,14 @@ def evaluate_pipeline_case(case, recipe, settings: Settings, dataset_dir: Path) 
         metrics["classification_schema_pass_rate"] = (
             valid_classifications / len(classifications) if classifications else None
         )
+        metrics.update(pipeline_diagnostic_metrics(
+            candidates,
+            classifications,
+            diagnostic_events,
+            exhaustive=case.exhaustive and not degraded,
+            selected_match_count=(metrics.get("processed_slice_matched_event_count")
+                                  if case.max_candidates else metrics.get("matched_event_count")) or 0,
+        ))
         true_positives = (metrics.get("confusion_counts") or {}).get("tp", 0)
         metrics["cost_per_true_positive_usd"] = (
             provider_budget["estimated_spend_usd"] / true_positives

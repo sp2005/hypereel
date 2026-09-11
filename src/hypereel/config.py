@@ -63,7 +63,7 @@ class Settings:
     max_provider_calls: int = 0
     max_provider_spend_usd: float = 0.0
     provider_call_reserve_usd: float = 0.25
-    provider_spend_ledger_path: str = ""
+    provider_spend_ledger_path: str = "evals/iterations/spend-ledger.json"
     nebius_input_cost_per_million_usd: float = 10.0
     nebius_output_cost_per_million_usd: float = 30.0
     download_dir: str = "downloads"
@@ -113,7 +113,9 @@ def get_settings() -> Settings:
         max_provider_calls=_get_int("HYPEREEL_MAX_PROVIDER_CALLS", 0),
         max_provider_spend_usd=_get_float("HYPEREEL_MAX_PROVIDER_SPEND_USD", 0.0),
         provider_call_reserve_usd=_get_float("HYPEREEL_PROVIDER_CALL_RESERVE_USD", 0.25),
-        provider_spend_ledger_path=_get("HYPEREEL_PROVIDER_SPEND_LEDGER_PATH"),
+        provider_spend_ledger_path=_get(
+            "HYPEREEL_PROVIDER_SPEND_LEDGER_PATH", "evals/iterations/spend-ledger.json"
+        ),
         nebius_input_cost_per_million_usd=_get_float(
             "NEBIUS_INPUT_COST_PER_MILLION_USD", 10.0
         ),

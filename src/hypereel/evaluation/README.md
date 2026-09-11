@@ -108,7 +108,7 @@ To run the package-local integration tests:
 python -m pytest tests src/hypereel/evaluation/tests
 ```
 
-## Candidate recall, final quality, and operational success (selection-v4)
+## Candidate recall, final quality, and operational success (selection-v5)
 
 Both selection replay and pipeline evaluation report `candidate_recall`:
 
@@ -139,7 +139,7 @@ errors occur before case execution and are not attempted cases. This measures
 execution health under the runner's existing status detection, not AI correctness.
 No status detection or production pipeline behavior was changed.
 
-The report's metric version is now `selection-v4`. Final selection also reports
+The report's metric version is now `selection-v5`. Final selection also reports
 `selected_event_recall` and, when annotations are exhaustive, `selection_f1`.
 JSON reports expose
 per-case `metrics.candidate_recall`, overall `operational_success_rate`, and

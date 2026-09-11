@@ -4,6 +4,7 @@ from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 import subprocess
+from uuid import uuid4
 from math import isfinite
 
 from ..recipe import load_recipe
@@ -77,7 +78,8 @@ def _run(dataset_path, *, mode="selection", settings=None) -> dict:
     except (OSError, subprocess.SubprocessError):
         revision, dirty = None, None
     return {
-        "schema_version": 1, "metric_version": "selection-v4", "mode": mode,
+        "schema_version": 1, "metric_version": "selection-v5", "mode": mode,
+        "evaluation_run_id": str(uuid4()),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset_path": str(path), "dataset_sha256": sha256(path.read_bytes()).hexdigest(),
         "code_revision": revision, "working_tree_dirty": dirty,
