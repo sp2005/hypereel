@@ -58,6 +58,11 @@ class Settings:
 
     extra: dict = field(default_factory=dict)
 
+    tracing_enabled: bool = False
+    langsmith_api_key: str = field(default="", repr=False)
+    langsmith_project: str = "hypereel-dev"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+
     def key_for(self, provider: str) -> Optional[str]:
         return {
             "gemini": self.gemini_api_key,
@@ -91,4 +96,9 @@ def get_settings() -> Settings:
         download_dir=_get("HYPEREEL_DOWNLOAD_DIR", "downloads"),
         output_dir=_get("HYPEREEL_OUTPUT_DIR", "output"),
         memory_path=_get("HYPEREEL_MEMORY_PATH", "hypereel_memory.json"),
+        tracing_enabled=_get("HYPEREEL_TRACING_ENABLED", "false").lower() in {"true", "1", "yes"},
+        langsmith_api_key=_get("LANGSMITH_API_KEY"),
+        langsmith_project=_get("LANGSMITH_PROJECT", "hypereel-dev") or "hypereel-dev",
+        langsmith_endpoint=_get("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+        or "https://api.smith.langchain.com",
     )

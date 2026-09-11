@@ -42,6 +42,7 @@ from hypereel.graph.build import build_graph
 from hypereel.graph.state import GATE_UNDERFILLED, new_state
 from hypereel.ingest.source_resolver import parse_video_quality
 from hypereel.models import Clip, Recipe
+from hypereel.observability import with_tracing
 from hypereel.providers.factory import get_llm_provider, get_vision_provider
 from hypereel.recipe import RecipeError, load_recipe
 
@@ -1081,7 +1082,10 @@ def _start_run(
     light up as the agent completes them.
     """
     app = build_graph()
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    config = with_tracing(
+        {"configurable": {"thread_id": str(uuid.uuid4())}}, get_settings(),
+        recipe_id=recipe.id, entrypoint="streamlit",
+    )
     initial = new_state(
         source,
         recipe,

@@ -43,6 +43,7 @@ from langgraph.graph import END, StateGraph
 
 from ..config import Settings, get_settings
 from ..models import Recipe, ReelResult
+from ..observability import with_tracing
 from .nodes import (
     approve_clips_node,
     approve_share_node,
@@ -149,7 +150,10 @@ def run_pipeline(
 
     try:
         app = build_graph(settings=settings)
-        config = {"configurable": {"thread_id": thread_id}}
+        config = with_tracing(
+            {"configurable": {"thread_id": thread_id}}, settings,
+            recipe_id=recipe.id, entrypoint="runner",
+        )
         initial = new_state(
             source,
             recipe,

@@ -21,6 +21,9 @@ def _force_mock_providers(monkeypatch):
     """
     monkeypatch.setenv("HYPEREEL_VISION_PROVIDER", "mock")
     monkeypatch.setenv("HYPEREEL_LLM_PROVIDER", "mock")
+    monkeypatch.setenv("HYPEREEL_TRACING_ENABLED", "false")
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "false")
 
 
 from hypereel.models import (

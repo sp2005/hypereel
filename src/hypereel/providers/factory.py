@@ -20,6 +20,16 @@ _log = logging.getLogger("hypereel.providers")
 
 def get_vision_provider(settings: Settings | None = None) -> VisionProvider:
     settings = settings or get_settings()
+    provider = _get_vision_provider(settings)
+    if settings.tracing_enabled and settings.langsmith_api_key:
+        from .traced import TracedVisionProvider
+
+        return TracedVisionProvider(provider, (settings.vision_provider or "mock").lower())
+    return provider
+
+
+def _get_vision_provider(settings: Settings) -> VisionProvider:
+    settings = settings or get_settings()
     provider = (settings.vision_provider or "mock").lower()
 
     if provider == "mock":
@@ -52,6 +62,16 @@ def get_vision_provider(settings: Settings | None = None) -> VisionProvider:
 
 
 def get_llm_provider(settings: Settings | None = None) -> LLMProvider:
+    settings = settings or get_settings()
+    provider = _get_llm_provider(settings)
+    if settings.tracing_enabled and settings.langsmith_api_key:
+        from .traced import TracedLLMProvider
+
+        return TracedLLMProvider(provider, (settings.llm_provider or "mock").lower())
+    return provider
+
+
+def _get_llm_provider(settings: Settings) -> LLMProvider:
     settings = settings or get_settings()
     provider = (settings.llm_provider or "mock").lower()
 

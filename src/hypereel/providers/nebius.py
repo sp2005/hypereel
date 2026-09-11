@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from ..config import Settings
+from ..observability import record_provider_failure
 from ..models import Classification, Recipe
 from .base import LLMProvider, VisionProvider
 from ._util import (
@@ -58,6 +59,7 @@ class OpenAICompatVisionProvider(VisionProvider):
             text = completion.choices[0].message.content or ""
             return parse_classification_json(text, recipe)
         except Exception as exc:
+            record_provider_failure(exc)
             return Classification(
                 moment_type=None,
                 subject_present=False,
@@ -88,5 +90,6 @@ class OpenAICompatLLMProvider(LLMProvider):
                 max_tokens=max_tokens,
             )
             return completion.choices[0].message.content or ""
-        except Exception:
+        except Exception as exc:
+            record_provider_failure(exc)
             return ""
