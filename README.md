@@ -209,3 +209,22 @@ There is also a self-correction path: if the selected clips underfill the recipe
 - **Free/offline by default.** The full pipeline — ingest, signal detection, classification, selection, render, summarize — runs with zero API keys via deterministic mock providers, which is also what keeps the test suite fully offline.
 - **Heavy libraries are optional and lazily imported.** `yt-dlp`, `opencv-python`, `librosa`, and `moviepy` are only imported inside the functions that need them, so the core package, the CLI, and the test suite all import and run fine even when none of them are installed; the render step falls back to writing a JSON manifest instead of a video when `moviepy`/`ffmpeg` aren't available.
 - **Python 3.14.** `streamlit` is imported lazily inside `app.py`'s `main()` for the same reason — the module (and everything that imports it) stays importable even without it installed.
+
+## Offline selection evaluation
+
+Replay fixed candidates and classifications through the existing selector without
+model calls, media processing, rendering, memory writes, or LangSmith uploads:
+
+```bash
+python -m hypereel.evaluation.cli run --mode selection --dataset evals/datasets/smoke.jsonl
+```
+
+This command is implemented. It creates JSON and Markdown reports in a unique
+`evals/results/` subdirectory and prints the report location. The three included
+cases are synthetic smoke checks, not a real-video quality benchmark. Metrics
+cover budget compliance, boundaries, overlap, and optional reference-event
+matching. Missing labels are N/A; failed cases are reported explicitly.
+
+See [`evals/README.md`](evals/README.md) for dataset fields, metric definitions,
+exit codes, and supported options. Only selection replay is currently supported;
+full-pipeline evaluation and LangSmith experiments are separate future increments.

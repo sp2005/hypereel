@@ -29,3 +29,6 @@ hypereel_memory.json
 .ruff_cache/
 .mypy_cache/
 .DS_Store
+
+# Local evaluation artifacts
+evals/results/
