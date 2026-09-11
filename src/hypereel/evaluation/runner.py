@@ -35,6 +35,7 @@ def _run(dataset_path, *, mode="selection", settings=None, judge=False) -> dict:
     else:
         cases = load_dataset(path)
     results = []
+    pending_judges = []
     for case in cases:
         result = {"case_id": case.case_id, "synthetic": case.synthetic, "status": "failed",
                   "recipe_sha256": None, "metrics": {}, "matches": [], "clips": []}
@@ -71,16 +72,19 @@ def _run(dataset_path, *, mode="selection", settings=None, judge=False) -> dict:
             result["elapsed_seconds"] = perf_counter() - start
             if judge:
                 if result["status"] == "success":
-                    from .judge import judge_reel
-                    result["llm_judge"] = judge_reel(
-                        result, recipe, case, settings, evaluation_run_id=evaluation_run_id,
-                    )
+                    pending_judges.append((result, recipe, case))
                 else:
                     result["llm_judge"] = {
                         "status": "skipped", "assessment": None, "basis": "metadata_only",
                         "error": "case failed or degraded; judge skipped",
                     }
             results.append(result)
+    # Judge spending must not consume the budget needed by later pipeline cases.
+    for result, recipe, case in pending_judges:
+        from .judge import judge_reel
+        result["llm_judge"] = judge_reel(
+            result, recipe, case, settings, evaluation_run_id=evaluation_run_id,
+        )
     try:
         revision = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[3],

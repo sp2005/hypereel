@@ -94,12 +94,23 @@ def judge_reel(result: dict, recipe: Recipe, case, settings: Settings,
                *, evaluation_run_id: str) -> dict:
     """Return a separate assessment envelope; never mutate results or retry calls."""
     started = perf_counter()
+    configured_model = {
+        "gemini": settings.gemini_model,
+        "groq": settings.groq_vision_model,
+        "nebius": settings.nebius_model,
+        "fireworks": settings.fireworks_model,
+    }.get((settings.llm_provider or "mock").lower())
     envelope = {
         "status": "skipped", "basis": "metadata_only", "rubric_version": RUBRIC_VERSION,
         "requested_provider": settings.llm_provider, "actual_provider": None,
         "assessment": None, "evaluation_run_id": evaluation_run_id,
         "pipeline_trace_execution_id": result.get("trace_execution_id"),
         "trace_execution_id": None,
+        "configured_model": configured_model,
+        "usage_accounting_available": False,
+        "provider_attempted_calls": None,
+        "estimated_provider_spend_usd": None,
+        "provider_usage": None,
     }
     try:
         if result.get("status") != "success":
@@ -144,7 +155,8 @@ def judge_reel(result: dict, recipe: Recipe, case, settings: Settings,
         config = {**config, "metadata": {**config.get("metadata", {}),
                   "evaluation_run_id": evaluation_run_id, "evaluation_case_id": case.case_id,
                   "pipeline_trace_execution_id": result.get("trace_execution_id"),
-                  "judge_rubric_version": RUBRIC_VERSION}}
+                  "judge_rubric_version": RUBRIC_VERSION,
+                  "judge_configured_model": configured_model}}
         envelope["trace_execution_id"] = config["metadata"].get("hypereel_execution_id")
 
         def execute(_):
@@ -171,9 +183,12 @@ def judge_reel(result: dict, recipe: Recipe, case, settings: Settings,
                 assessment = task.invoke({}, config) if task is not None else execute({})
                 envelope.update(status="success", assessment=assessment)
             finally:
-                envelope["provider_attempted_calls"] = usage["attempted_calls"]
-                envelope["estimated_provider_spend_usd"] = usage["estimated_spend_usd"]
-                envelope["provider_usage"] = usage["calls"]
+                calls = usage["calls"]
+                accounted = bool(calls) and all("estimated_cost_usd" in call for call in calls)
+                envelope["usage_accounting_available"] = accounted
+                envelope["provider_attempted_calls"] = usage["attempted_calls"] if calls else None
+                envelope["estimated_provider_spend_usd"] = usage["estimated_spend_usd"] if accounted else None
+                envelope["provider_usage"] = calls or None
     except JudgeResponseError as exc:
         envelope.update(status="invalid_response", error=str(exc))
     except JudgeUnavailable as exc:

@@ -97,6 +97,17 @@ HYPEREEL_LLM_PROVIDER=mock|gemini|groq|nebius|fireworks
 
 along with the matching API key (`GEMINI_API_KEY`, `GROQ_API_KEY`, `NEBIUS_API_KEY`, or `FIREWORKS_API_KEY`) and the provider extra (`pip install -e ".[providers]"`). Nebius and Fireworks use OpenAI-compatible endpoints; see `.env.example` for the full list of knobs (base URLs, model names, sampling settings).
 
+For the evaluation's optional LLM-as-a-Judge, choose one text provider in `.env`:
+
+| Provider | Selection | API key | Model setting |
+| --- | --- | --- | --- |
+| Gemini | `HYPEREEL_LLM_PROVIDER=gemini` | `GEMINI_API_KEY` | `GEMINI_MODEL` |
+| Groq | `HYPEREEL_LLM_PROVIDER=groq` | `GROQ_API_KEY` | `GROQ_VISION_MODEL` (also used for text calls) |
+| Nebius | `HYPEREEL_LLM_PROVIDER=nebius` | `NEBIUS_API_KEY` | `NEBIUS_MODEL` |
+
+Set the matching key and a model available to your account. Vision selection is
+independent; real pipeline evaluation also needs a configured vision provider.
+
 **The graded submission routes at least one model call through Nebius Token Factory** — set both `HYPEREEL_VISION_PROVIDER=nebius` and `HYPEREEL_LLM_PROVIDER=nebius` with `NEBIUS_API_KEY` filled in.
 
 Every provider path degrades gracefully: if an SDK isn't installed or a key is missing/invalid, HypeReel falls back to the mock provider rather than crashing the pipeline.
@@ -138,7 +149,7 @@ under its graph node (`provider.vision.<name>` or `provider.llm.<name>`). These
 reuse the graph client and execution ID, and record actual/requested provider,
 fallback-to-mock status, and vision candidate index/frame count. Prompts, frame
 paths, frame contents, and response text are omitted from these spans.
-Calls outside an instrumented graph (including UI health checks) create no
+Calls outside an instrumented graph or evaluation judge (including UI health checks) create no
 provider spans. Disabled tracing returns the original provider implementations.
 Live vision/text operations are recorded with LangSmith's `llm` run type; mock
 operations remain `chain` spans. Each executed node and provider call has start
@@ -155,10 +166,10 @@ low-confidence classification alone is not treated as an API failure. Ingest and
 render fallbacks continue to be described in the existing application notes;
 they are not reclassified as thrown node exceptions.
 
-Token/cost accounting is unavailable because the provider contracts do not expose
-SDK usage metadata. Execution time includes provider work, not the human wait
-between approval resumes.
-Evaluation tooling is not included yet.
+Provider spans do not expose token/cost accounting. Local evaluation reports
+include usage and estimated spend where provider adapters supply them; this
+instrumentation is not available for every provider. Execution time includes
+provider work, not the human wait between approval resumes.
 
 For programmatic callers using `build_graph()` directly, pass your invocation
 config through `hypereel.observability.with_tracing(config, settings,
@@ -188,6 +199,7 @@ src/hypereel/
   render/         Clip cut/concat/overlay (moviepy/ffmpeg), with a manifest fallback when unavailable
   memory/         Persistent user profile + learned accept/reject preferences
   graph/          LangGraph state (state.py), node functions (nodes.py), and graph assembly + runner (build.py)
+  evaluation/     Deterministic metrics, optional LLM-as-a-Judge, runners, and local reports
   app.py          Streamlit UI
   cli.py          Command-line entry point (`python -m hypereel.cli`)
 recipes/          basketball_player.yaml (flagship) · architecture_walkthrough.yaml (generalization stub)
@@ -210,21 +222,64 @@ There is also a self-correction path: if the selected clips underfill the recipe
 - **Heavy libraries are optional and lazily imported.** `yt-dlp`, `opencv-python`, `librosa`, and `moviepy` are only imported inside the functions that need them, so the core package, the CLI, and the test suite all import and run fine even when none of them are installed; the render step falls back to writing a JSON manifest instead of a video when `moviepy`/`ffmpeg` aren't available.
 - **Python 3.14.** `streamlit` is imported lazily inside `app.py`'s `main()` for the same reason — the module (and everything that imports it) stays importable even without it installed.
 
-## Offline selection evaluation
+## Evaluation
 
-Replay fixed candidates and classifications through the existing selector without
-model calls, media processing, rendering, memory writes, or LangSmith uploads:
+The evaluation package supports offline **selection replay** from fixed candidates
+and classifications, and **pipeline evaluation** through the first approval gate.
+Neither mode renders, shares, or writes user feedback memory.
+
+- **Deterministic metrics** measure budget compliance/utilization, clip boundaries,
+  overlap, candidate recall, reference-event precision/recall, action completeness,
+  and diversity. Operational success rate measures successful cases out of all
+  attempted cases. Metrics requiring unavailable evidence are reported as N/A.
+- **LLM-as-a-Judge** is an optional review requested with `--judge`, after each
+  case's metrics are computed. It returns validated JSON with `relevance`,
+  `coverage`, `coherence`, `diversity`, `overall_score`, `reasoning`, and
+  `recommendations`. Scores are in [0,1] or null when unsupported; coverage requires
+  exhaustive reference annotations. These advisory results do not change selected
+  clips, deterministic aggregates, case status, or exit codes.
+
+The evaluation judge reviews recipe intent, clip metadata, metrics, and available
+reference events—not rendered video or audio. It is separate from the production
+graph's revision judge. Failed/degraded cases are skipped. The mock provider
+(including fallback to mock) also skips judging: its canned responses cannot
+provide a meaningful quality assessment, so no scores are fabricated.
+
+### Running evaluations
+
+Run from the repository root after installing HypeReel:
 
 ```bash
-python -m hypereel.evaluation.cli run --mode selection --dataset evals/datasets/smoke.jsonl
+# Offline selection replay; no model calls or LangSmith uploads.
+python -m hypereel.evaluation run --mode selection --dataset evals/datasets/smoke.jsonl
+
+# Add an advisory judge using the real LLM configured in .env (may incur API cost).
+python -m hypereel.evaluation run --mode selection --dataset evals/datasets/smoke.jsonl --judge
+
+# Evaluate a real pipeline dataset and add the post-metrics judge.
+# Replace YOUR_DATASET.jsonl with a pipeline dataset; --change-note is required.
+python -m hypereel.evaluation run --mode pipeline --dataset YOUR_DATASET.jsonl --change-note "baseline with advisory judge" --judge
 ```
 
-This command is implemented. It creates JSON and Markdown reports in a unique
-`evals/results/` subdirectory and prints the report location. The three included
-cases are synthetic smoke checks, not a real-video quality benchmark. Metrics
-cover budget compliance, boundaries, overlap, and optional reference-event
-matching. Missing labels are N/A; failed cases are reported explicitly.
+Configure a provider as described in [Enabling real models](#enabling-real-models).
+Pipeline runs may download sources and call vision/LLM providers; real media
+processing needs `pip install -e ".[media]"`. The smoke dataset is synthetic and
+does not establish real-video quality, even with a live judge.
 
-See [`evals/README.md`](evals/README.md) for dataset fields, metric definitions,
-exit codes, and supported options. Only selection replay is currently supported;
-full-pipeline evaluation and LangSmith experiments are separate future increments.
+Reports are written to a unique directory under `evals/results/`: `summary.md`,
+`report.json`, and `cases.jsonl`. Use `--output PATH` for a new or empty directory.
+With `--judge`, reports include assessment status, scores, reasoning, and
+recommendations; invalid responses and unavailable assessments remain visible.
+Pipeline runs also append iteration history to `evals/iterations/history.jsonl`.
+
+### LangSmith integration
+
+Use the settings and telemetry extra in [Optional LangSmith tracing](#optional-langsmith-tracing).
+Pipeline evaluation reuses graph/node/provider tracing. With `--judge`, a separate
+`evaluation.llm_judge` trace contains the provider call, timing, and failures,
+correlated by evaluation run/case IDs and the pipeline execution ID when present.
+Inputs and outputs remain hidden; read scores and reasoning in the local reports.
+Tracing is opt-in and does not upload LangSmith datasets or evaluation experiments.
+
+See [`src/hypereel/evaluation/README.md`](src/hypereel/evaluation/README.md) for
+dataset formats, metric definitions, judge limitations, and supported options.

@@ -61,7 +61,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests"]
+testpaths = ["tests", "src/hypereel/evaluation/tests"]
 addopts = "-q"
 
 [tool.ruff]

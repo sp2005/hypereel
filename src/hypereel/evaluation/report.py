@@ -1,6 +1,7 @@
 """Local reports with separate synthetic/labeled groups and explicit denominators."""
 import json
 import html
+import re
 from pathlib import Path
 from .metrics import operational_success_rate
 
@@ -43,6 +44,11 @@ def _health_summary(cases):
             f"({successful}/{len(cases)} attempted cases).")
 
 
+def _judge_cell(value):
+    text = html.escape(str(value)).replace("\n", " ").replace("\r", " ")
+    return re.sub(r"([\\`*_\[\]{}()!|~])", r"\\\1", text)
+
+
 def _judge_markdown(cases):
     judged = [c for c in cases if "llm_judge" in c]
     if not judged:
@@ -56,7 +62,7 @@ def _judge_markdown(cases):
     for case in judged:
         judge = case["llm_judge"]
         scores = judge.get("assessment") or {}
-        cells = [_cell(html.escape(str(value))) for value in (
+        cells = [_judge_cell(value) for value in (
             case["case_id"], judge["status"], judge.get("actual_provider") or "N/A")]
         cells += [_rate(scores.get(key)) for key in
                   ("relevance", "coverage", "coherence", "diversity", "overall_score")]
@@ -67,7 +73,7 @@ def _judge_markdown(cases):
         assessment = judge.get("assessment") or {}
         values = [case["case_id"], assessment.get("reasoning") or judge.get("error", "N/A"),
                   "; ".join(assessment.get("recommendations", [])) or "None"]
-        lines.append("| " + " | ".join(_cell(html.escape(str(v))) for v in values) + " |")
+        lines.append("| " + " | ".join(_judge_cell(v) for v in values) + " |")
     return lines
 
 

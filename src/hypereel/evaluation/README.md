@@ -151,7 +151,7 @@ documented in `evals/REFERENCE_BENCHMARK.md`.
 ## Optional post-evaluation LLM-as-a-Judge
 
 Add `--judge` to either evaluation mode to request a separate LLM assessment
-**after deterministic metrics have been computed**:
+**after every case's pipeline execution and deterministic metrics have completed**:
 
 ```bash
 python -m hypereel.evaluation run --mode selection --dataset evals/datasets/smoke.jsonl --judge
@@ -217,6 +217,13 @@ from the original pipeline spend. The existing budget scope/ledger is reused,
 and consumed pipeline call allowances are deducted before judging. Cost tracking
 and enforcement depend on the existing provider adapter's budget instrumentation;
 this PR does not broaden that instrumentation to other providers.
+
+`configured_model` records the selected model setting, not a provider-confirmed
+model version; traces include it as `judge_configured_model`. Missing usage
+accounting is represented by `usage_accounting_available: false` and null values,
+not zero cost. If a failed call exposes only an attempt record, that record and
+count are retained while estimated spend remains null. Judge text is escaped in
+Markdown reports; structured JSON retains the original assessment strings.
 
 Enable the existing `HYPEREEL_TRACING_ENABLED`, `LANGSMITH_API_KEY`, and
 `LANGSMITH_PROJECT` settings for a root `evaluation.llm_judge` trace and nested
