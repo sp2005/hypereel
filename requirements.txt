@@ -12,6 +12,7 @@ python-dotenv>=1.0
 # ---- Agent framework ----
 langgraph>=0.2.0
 langchain-core>=0.3.0
+langsmith>=0.4,<1        # opt-in graph tracing; enabled separately in .env
 
 # ---- Media processing (heavy; imported lazily so mock/tests don't need them) ----
 yt-dlp>=2024.0.0          # YouTube ingestion

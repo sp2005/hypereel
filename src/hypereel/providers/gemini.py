@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from ..config import Settings
+from ..observability import record_provider_failure
 from ..models import Classification, Recipe
 from .base import LLMProvider, VisionProvider
 from ._util import build_classification_prompt, encode_frames_b64, parse_classification_json
@@ -40,6 +41,7 @@ class GeminiVisionProvider(VisionProvider):
             text = getattr(response, "text", "") or ""
             return parse_classification_json(text, recipe)
         except Exception as exc:
+            record_provider_failure(exc)
             return Classification(
                 moment_type=None,
                 subject_present=False,
@@ -66,5 +68,6 @@ class GeminiLLMProvider(LLMProvider):
                 generation_config={"max_output_tokens": max_tokens},
             )
             return getattr(response, "text", "") or ""
-        except Exception:
+        except Exception as exc:
+            record_provider_failure(exc)
             return ""

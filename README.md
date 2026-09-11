@@ -103,6 +103,67 @@ Every provider path degrades gracefully: if an SDK isn't installed or a key is m
 
 > **Note:** `.env` is only read if `python-dotenv` is installed (it's in the core deps, so a normal `pip install -e .` covers it). If you install by some other means and skip it, export the variables in your shell instead — otherwise a missing `.env` is silently ignored and everything falls back to `mock`.
 
+## Optional LangSmith tracing
+
+Install `pip install -e ".[telemetry]"` (also included in `.[all]`) and set:
+
+```dotenv
+HYPEREEL_TRACING_ENABLED=true
+LANGSMITH_API_KEY=<your key>
+LANGSMITH_PROJECT=hypereel-dev
+# Optional: set LANGSMITH_ENDPOINT for your LangSmith region/deployment.
+```
+
+Then run the existing CLI or Streamlit commands. Graph invocations and their
+nodes appear in the configured project, including timing and judge revisions.
+Approval resumes produce separate invocation traces grouped by the same
+`hypereel_execution_id` metadata value. Checkpoint thread IDs remain unchanged.
+The `runner` entrypoint covers the CLI and direct `run_pipeline()` calls;
+`streamlit` identifies web runs. Provider metadata describes the *requested*
+configuration, not a guarantee that a live provider succeeded.
+
+This integration uses an explicit callback. Leave `LANGSMITH_TRACING` and legacy
+`LANGCHAIN_TRACING_V2` unset or false; enabling them independently activates the
+framework's global tracing outside this opt-in layer. Graph inputs and outputs
+are hidden by this layer's client, so videos, subject descriptions, and complete
+state payloads are not uploaded as inputs/outputs. Trace names, metadata, timing,
+and native exception messages are still recorded. Do not put secrets in metadata.
+
+Tracing defaults off. Missing credentials/SDKs or initialization errors leave
+execution unchanged; callback/upload errors are best-effort and never retry the
+pipeline. Uploads use the SDK's background queue, so abrupt process termination
+can lose pending traces. No network or account is needed for the normal tests.
+Each factory-created vision/text provider also records a child operation span
+under its graph node (`provider.vision.<name>` or `provider.llm.<name>`). These
+reuse the graph client and execution ID, and record actual/requested provider,
+fallback-to-mock status, and vision candidate index/frame count. Prompts, frame
+paths, frame contents, and response text are omitted from these spans.
+Calls outside an instrumented graph (including UI health checks) create no
+provider spans. Disabled tracing returns the original provider implementations.
+Live vision/text operations are recorded with LangSmith's `llm` run type; mock
+operations remain `chain` spans. Each executed node and provider call has start
+and end timestamps, from which LangSmith displays execution time. Repeated
+`select`/`judge` executions each get their own span. Approval nodes execute and
+are traced only after the corresponding interrupt is resumed.
+
+Unhandled node exceptions are captured by the native graph tracer. API exceptions
+caught by Gemini, Groq, Nebius, and Fireworks are also recorded as provider-span
+errors, using only the exception class name, while preserving the existing
+empty-text/low-confidence fallback returns. A graph node may therefore complete
+successfully even when its child model call failed. An empty response or a
+low-confidence classification alone is not treated as an API failure. Ingest and
+render fallbacks continue to be described in the existing application notes;
+they are not reclassified as thrown node exceptions.
+
+Token/cost accounting is unavailable because the provider contracts do not expose
+SDK usage metadata. Execution time includes provider work, not the human wait
+between approval resumes.
+Evaluation tooling is not included yet.
+
+For programmatic callers using `build_graph()` directly, pass your invocation
+config through `hypereel.observability.with_tracing(config, settings,
+recipe_id=recipe.id, entrypoint="your-entrypoint")` once, and reuse it for resumes.
+
 ## Running tests
 
 ```bash

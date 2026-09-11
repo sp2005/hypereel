@@ -22,6 +22,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Explicit SDK dependency for opt-in graph tracing (also often transitive).
+telemetry = ["langsmith>=0.4,<1"]
 # Real video ingestion + local signal extraction + video render.
 media = [
   "yt-dlp>=2024.0.0",
@@ -43,6 +45,7 @@ ui = ["streamlit>=1.30"]
 dev = ["pytest>=8.0", "pytest-mock>=3.12"]
 # Everything, for a full local install.
 all = [
+  "langsmith>=0.4,<1",
   "yt-dlp>=2024.0.0", "opencv-python>=4.8", "librosa>=0.10", "soundfile>=0.12",
   "moviepy>=1.0.3", "numpy>=1.24",
   "google-generativeai>=0.7", "groq>=0.9", "openai>=1.30",
